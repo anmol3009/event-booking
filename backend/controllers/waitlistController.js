@@ -43,10 +43,12 @@ const getWaitlist = asyncHandler(async (req, res) => {
   const snap = await db
     .collection('waitlist')
     .where('eventId', '==', eventId)
-    .orderBy('position', 'asc')
     .get();
 
-  const waitlist = snap.docs.map(d => d.data());
+  const waitlist = snap.docs
+    .map(d => d.data())
+    .sort((a, b) => a.position - b.position);
+  
   res.status(200).json({ success: true, waitlist });
 });
 

@@ -76,9 +76,9 @@ export default function Home() {
             loop
             playsInline
             className="w-full h-full object-cover"
-            style={{ filter: 'grayscale(40%) brightness(0.25)', transform: 'scale(1.1)' }}
+            style={{ filter: 'grayscale(10%) brightness(0.8)', transform: 'scale(1.1)' }}
           >
-            <source src="https://videos.pexels.com/video-files/3045163/3045163-uhd_2560_1440_24fps.mp4" type="video/mp4" />
+            <source src="https://www.pexels.com/download/video/31540264/" type="video/mp4" />
             <source src="https://videos.pexels.com/video-files/1190735/1190735-hd_1920_1080_30fps.mp4" type="video/mp4" />
           </video>
           {/* Fallback image if video doesn't load */}

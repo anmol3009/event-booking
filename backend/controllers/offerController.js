@@ -131,7 +131,7 @@ const respondToOffer = asyncHandler(async (req, res) => {
 
       t.update(listingRef, { status: 'sold', buyerId: offer.buyerId, soldAt: new Date().toISOString() });
       t.update(db.collection('bookings').doc(listing.ticketId), {
-        status: 'cancelled', cancelledAt: new Date().toISOString(), resoldTo: offer.buyerId,
+        status: 'resold', resoldAt: new Date().toISOString(), resoldTo: offer.buyerId,
       });
 
       const newBookingRef = db.collection('bookings').doc();
@@ -175,8 +175,10 @@ const getOffers = asyncHandler(async (req, res) => {
   const { role } = req.query;
 
   const field = role === 'seller' ? 'sellerId' : 'buyerId';
-  const snap  = await db.collection('offers').where(field, '==', uid).orderBy('createdAt', 'desc').get();
-  const offers = snap.docs.map(d => d.data());
+  const snap  = await db.collection('offers').where(field, '==', uid).get();
+  const offers = snap.docs
+    .map(d => d.data())
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   res.status(200).json({ success: true, offers });
 });

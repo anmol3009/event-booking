@@ -57,10 +57,13 @@ function SeatMapModal({ ticket, onClose, isDark }) {
       .finally(() => setLoading(false));
   }, [ticket.eventId]);
 
+  const rows = useMemo(() => {
+    if (!event) return [];
+    return generateMiniLayout(event.totalSeats, event.tiers);
+  }, [event]);
+
   if (loading) return null;
   if (!event) return null;
-
-  const rows = useMemo(() => generateMiniLayout(event.totalSeats, event.tiers), [event]);
 
   return (
     <motion.div
@@ -316,9 +319,14 @@ function ResaleTicketCard({ ticket, onViewSeat }) {
         </div>
 
         {/* Prices */}
-        <div className="flex items-baseline gap-3 mb-4">
-          <span className="text-sm line-through" style={{ color: isDark ? '#555' : '#bbb' }}>₹{ticket.originalPrice}</span>
-          <span className="text-2xl font-bold font-mono" style={{ color: '#7DA8CF' }}>₹{sliderValue}</span>
+        <div className="flex flex-col gap-1 mb-3">
+          <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: isDark ? '#aaa' : '#777' }}>
+            Seller asking price: ₹{ticket.resalePrice.toLocaleString()}
+          </span>
+          <div className="flex items-baseline gap-3">
+            <span className="text-sm line-through" style={{ color: isDark ? '#555' : '#bbb' }}>₹{ticket.originalPrice}</span>
+            <span className="text-2xl font-bold font-mono" style={{ color: '#7DA8CF' }}>₹{sliderValue}</span>
+          </div>
         </div>
 
         {/* Price Slider */}
@@ -443,11 +451,14 @@ export default function ResaleMarketplace() {
         // Map listings to include event info
         const enrichedListings = (resaleData.listings || []).map(l => ({
           ...l,
-          id: l.listingId, // for key
+          id: l.listingId,
+          resalePrice: l.price,          // backend stores as `price`, card expects `resalePrice`
+          originalPrice: l.originalPrice,
+          seller: l.sellerName || `Seller #${(l.sellerId || '').slice(0, 6)}`,
           eventTitle: eventMap[l.eventId]?.title || 'Unknown Event',
           image: eventMap[l.eventId]?.images?.[0] || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&h=400&fit=crop',
           seat: (l.seats || []).join(', '),
-          tier: 'Resale', // or map from event tiers if available
+          tier: 'Resale',
         }));
 
         setEvents(eventMap);

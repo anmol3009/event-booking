@@ -8,9 +8,17 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 /* Parse "12 April 2026" → Date object */
 function parseEventDate(dateStr) {
+  if (!dateStr) return null;
+  // Handle ISO format: "2026-03-28" or "2026-03-28T..."
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    const d = new Date(dateStr.slice(0, 10));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  // Handle "28 March 2026" word format
   const parts = dateStr.split(' ');
   if (parts.length < 3) return null;
   const months = { January: 0, February: 1, March: 2, April: 3, May: 4, June: 5, July: 6, August: 7, September: 8, October: 9, November: 10, December: 11 };
+  if (months[parts[1]] === undefined) return null;
   return new Date(Number(parts[2]), months[parts[1]], Number(parts[0]));
 }
 
