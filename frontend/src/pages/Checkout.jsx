@@ -11,14 +11,25 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 export default function Checkout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useStore();
+  const { user, updateUser, clearSeats } = useStore();
   const { event, seats, tier, total, holdExpiry } = location.state || {};
   const [timeLeft, setTimeLeft] = useState(300);
   const [processing, setProcessing] = useState(false);
-  const [form, setForm] = useState({ name: '', card: '', expiry: '', cvv: '', email: '' });
+  const [coinsToUse, setCoinsToUse] = useState(0);
+  const [form, setForm] = useState({ 
+    name: user?.name || '', 
+    card: '', 
+    expiry: '', 
+    cvv: '', 
+    email: user?.email || '' 
+  });
   const [errors, setErrors] = useState({});
   const { mode } = useTheme();
   const isDark = mode === 'dark';
+
+  const userCoins = user?.coins || 0;
+  const coinDiscount = Math.min(userCoins, coinsToUse, total);
+  const finalTotal = total - coinDiscount;
 
   useEffect(() => {
     if (!holdExpiry) return;
@@ -73,19 +84,28 @@ export default function Checkout() {
         body: JSON.stringify({
           eventId: event.id,
           seatIds: seats.map(s => s.toString()),
-          totalAmount: total
+          totalAmount: total,
+          coinsToUse: coinDiscount
         })
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Payment confirmation failed');
 
+      // Sync coins in store
+      if (data.newCoins !== undefined) {
+        updateUser({ coins: data.newCoins });
+      }
+
+      // Clear selection
+      clearSeats();
+
       navigate(`/confirmation/${data.bookingId}`, { 
         state: { 
           event, 
           seats, 
           tier, 
-          total,
+          total: finalTotal,
           bookingId: data.bookingId
         } 
       });
@@ -105,7 +125,7 @@ export default function Checkout() {
   }
 
   const serviceFee = Math.round(total * 0.05);
-  const grandTotal = total + serviceFee;
+  const grandTotal = finalTotal + serviceFee;
   const timerColor = timeLeft < 60 ? '#EF4444' : timeLeft < 180 ? '#F59E0B' : '#7DA8CF';
 
   const inputStyle = {
@@ -217,11 +237,45 @@ export default function Checkout() {
               <span style={{ color: isDark ? '#666' : '#999' }}>{tier} × {seats.length}</span>
               <span className="font-mono" style={{ color: isDark ? '#fff' : '#111' }}>₹{total.toLocaleString()}</span>
             </div>
+            {coinDiscount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span style={{ color: '#7DA8CF' }}>Coin Discount</span>
+                <span className="font-mono" style={{ color: '#7DA8CF' }}>-₹{coinDiscount.toLocaleString()}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span style={{ color: isDark ? '#666' : '#999' }}>Service Fee</span>
               <span className="font-mono" style={{ color: isDark ? '#fff' : '#111' }}>₹{serviceFee.toLocaleString()}</span>
             </div>
           </div>
+
+          {/* Coin Redemption UI */}
+          {userCoins > 0 && (
+            <div className="mb-6 p-3 rounded border" style={{ borderColor: '#7DA8CF33', background: '#7DA8CF08' }}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#7DA8CF' }}>Use Coins</span>
+                <span className="text-xs" style={{ color: isDark ? '#555' : '#aaa' }}>Available: {userCoins}</span>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max={userCoins}
+                  value={coinsToUse}
+                  onChange={(e) => setCoinsToUse(Math.min(userCoins, parseInt(e.target.value) || 0))}
+                  className="w-full rounded border px-3 py-1.5 text-sm focus:outline-none"
+                  style={{ background: isDark ? '#000' : '#fff', borderColor: isDark ? '#333' : '#ddd', color: isDark ? '#fff' : '#333' }}
+                />
+                <button 
+                  onClick={() => setCoinsToUse(userCoins)}
+                  className="text-[10px] uppercase font-bold px-2 py-1 rounded bg-transparent border cursor-pointer hover:bg-[#7DA8CF11]"
+                  style={{ color: '#7DA8CF', borderColor: '#7DA8CF' }}
+                >
+                  Max
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="border-t pt-4 flex justify-between items-baseline" style={{ borderColor: isDark ? '#1a1a1a' : '#eee' }}>
             <span className="font-semibold" style={{ color: isDark ? '#fff' : '#111' }}>Total</span>
@@ -230,7 +284,7 @@ export default function Checkout() {
 
           <button
             onClick={handleConfirm}
-            disabled={processing || timeLeft === 0 || !isFormValid}
+            disabled={processing || timeLeft === 0}
             className="w-full mt-5 py-3.5 rounded font-bold text-sm uppercase tracking-wider border-none cursor-pointer flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: '#7DA8CF', color: '#000' }}
           >

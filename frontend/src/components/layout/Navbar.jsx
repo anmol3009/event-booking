@@ -128,6 +128,20 @@ export default function Navbar() {
                       <p className="text-sm font-medium" style={{ color: isDark ? '#fff' : '#111' }}>{user?.name || 'User'}</p>
                       <p className="text-xs" style={{ color: isDark ? '#666' : '#999' }}>{user?.email}</p>
                     </div>
+
+                    {/* Coins & Referral Info */}
+                    <div className="px-4 py-3 border-b space-y-2" style={{ borderColor: isDark ? '#222' : '#eee', background: isDark ? '#111' : '#fcfcfc' }}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: isDark ? '#555' : '#aaa' }}>Coins</span>
+                        <span className="text-xs font-bold font-mono" style={{ color: '#7DA8CF' }}>{user?.coins || 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: isDark ? '#555' : '#aaa' }}>Referral Code</span>
+                        <span className="text-[10px] font-mono p-1 rounded border leading-none" style={{ borderColor: '#7DA8CF33', color: '#7DA8CF', background: '#7DA8CF08' }}>
+                          {user?.myReferralCode || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
                     <Link to="/my-bookings" onClick={() => setShowProfile(false)} className="block px-4 py-2 text-sm no-underline" style={{ color: isDark ? '#ccc' : '#333' }}>My Bookings</Link>
                     <button onClick={() => { logout(); setShowProfile(false); }} className="w-full text-left px-4 py-2 text-sm cursor-pointer bg-transparent border-none" style={{ color: '#EF4444' }}>Sign Out</button>
                   </motion.div>
