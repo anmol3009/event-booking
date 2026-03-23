@@ -3,7 +3,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { assignFromWaitlist } = require('../services/waitlistService');
 const { sendBookingConfirmation } = require('../services/emailService');
 
-const HOLD_DURATION_MS = 8 * 60 * 1000; // 8 minutes
+const HOLD_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
 // ─── Helper: get seat ref ────────────────────────────────────────────────────
 const seatRef = (eventId, seatId) =>
@@ -46,8 +46,9 @@ const holdSeats = asyncHandler(async (req, res) => {
       if (status === 'booked') {
         throw Object.assign(new Error(`Seat ${snap.id} is already booked`), { statusCode: 409 });
       }
-      if (status === 'held' && !isExpiredHold) {
-        throw Object.assign(new Error(`Seat ${snap.id} is currently held by another user`), { statusCode: 409 });
+      // Only block if held by ANOTHER user AND not expired
+      if (status === 'held' && !isExpiredHold && data.heldBy !== uid) {
+        throw Object.assign(new Error(`Seat ${snap.id} is currently held by someone else`), { statusCode: 409 });
       }
     }
 
@@ -73,7 +74,7 @@ const holdSeats = asyncHandler(async (req, res) => {
  */
 const confirmBooking = asyncHandler(async (req, res) => {
   const { uid } = req.user;
-  const { eventId, seatIds, totalAmount } = req.body;
+  const { eventId, seatIds, totalAmount, coinsToUse } = req.body;
 
   if (!eventId || !Array.isArray(seatIds) || seatIds.length === 0) {
     return res.status(400).json({ success: false, message: 'eventId and seatIds[] are required' });
@@ -85,35 +86,64 @@ const confirmBooking = asyncHandler(async (req, res) => {
   }
 
   let bookingId;
+  let finalCoinBalance;
 
   await db.runTransaction(async (t) => {
+    const userRef = db.collection('users').doc(uid);
+    const userSnap = await t.get(userRef);
+    if (!userSnap.exists) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+    const user = userSnap.data();
+
     const eventRef = db.collection('events').doc(eventId);
     const eventSnap = await t.get(eventRef);
     if (!eventSnap.exists) throw Object.assign(new Error('Event not found'), { statusCode: 404 });
 
-    const reads = seatIds.map(id => t.get(seatRef(eventId, id)));
-    const snaps = await Promise.all(reads);
+    const seatReads = seatIds.map(id => t.get(seatRef(eventId, id)));
+    const seatSnaps = await Promise.all(seatReads);
 
-    for (const snap of snaps) {
+    // Read referrer if applicable
+    let referrerSnap = null;
+    if (!user.hasBooked && user.referredBy) {
+      const referrerRef = db.collection('users').doc(user.referredBy);
+      referrerSnap = await t.get(referrerRef);
+    }
+
+    // ─── VALIDATION (All Reads done) ──────────────────────────────────────────
+    for (const snap of seatSnaps) {
       if (!snap.exists) throw Object.assign(new Error(`Seat ${snap.id} not found`), { statusCode: 404 });
       const data = snap.data();
-
-      // Confirm only if seat is held by THIS user and hold is still valid
       if (data.status !== 'held' || data.heldBy !== uid) {
-        throw Object.assign(
-          new Error(`Seat ${snap.id} is not held by you. Please select and hold seats again.`),
-          { statusCode: 409 }
-        );
+        throw Object.assign(new Error(`Seat ${snap.id} is not held by you`), { statusCode: 409 });
       }
       if (new Date(data.holdExpiry) < new Date()) {
         throw Object.assign(new Error(`Hold for seat ${snap.id} has expired`), { statusCode: 409 });
       }
-      if (data.status === 'booked') {
-        throw Object.assign(new Error(`Seat ${snap.id} is already booked`), { statusCode: 409 });
-      }
     }
 
-    // Create booking document
+    // ─── Coin Usage Logic ─────────────────────────────────────────────────────
+    let finalAmount = parseFloat(totalAmount) || 0;
+    const coinsToDeduct = parseInt(coinsToUse, 10) || 0;
+    if (coinsToDeduct > 0) {
+      if (user.coins < coinsToDeduct) {
+        throw Object.assign(new Error(`Insufficient coins. Balance: ${user.coins}`), { statusCode: 400 });
+      }
+      finalAmount = Math.max(0, finalAmount - coinsToDeduct);
+    }
+
+    // ─── Rewards Logic ────────────────────────────────────────────────────────
+    let userCoinBalance = (user.coins || 0) - coinsToDeduct;
+    if (!user.hasBooked) {
+      if (user.referredBy && referrerSnap && referrerSnap.exists) {
+        t.update(referrerSnap.ref, { coins: (referrerSnap.data().coins || 0) + 50 });
+        userCoinBalance += 50;
+      }
+      t.update(userRef, { hasBooked: true, coins: userCoinBalance });
+    } else if (coinsToDeduct > 0) {
+      t.update(userRef, { coins: userCoinBalance });
+    }
+    finalCoinBalance = userCoinBalance;
+
+    // ─── Document Updates ─────────────────────────────────────────────────────
     const bookingRef = db.collection('bookings').doc();
     bookingId = bookingRef.id;
 
@@ -122,21 +152,18 @@ const confirmBooking = asyncHandler(async (req, res) => {
       userId:      uid,
       eventId,
       seats:       seatIds,
-      totalAmount: parseFloat(totalAmount) || 0,
+      totalAmount: finalAmount,
+      coinsUsed:   coinsToDeduct,
       status:      'confirmed',
       createdAt:   new Date().toISOString(),
     });
 
-    // Mark all seats as booked
-    for (const snap of snaps) {
+    for (const snap of seatSnaps) {
       t.update(snap.ref, { status: 'booked', bookedBy: uid, heldBy: null, holdExpiry: null });
     }
 
-    // Decrement availableSeats on the event
     const currentAvailable = eventSnap.data().availableSeats || 0;
-    t.update(eventRef, {
-      availableSeats: Math.max(0, currentAvailable - seatIds.length),
-    });
+    t.update(eventRef, { availableSeats: Math.max(0, currentAvailable - seatIds.length) });
   });
 
   // Fetch event name for email (outside transaction — fire-and-forget)
@@ -150,9 +177,14 @@ const confirmBooking = asyncHandler(async (req, res) => {
         bookingId,
       });
     }
-  });
+  }).catch(e => console.error('Email error:', e));
 
-  res.status(201).json({ success: true, message: 'Booking confirmed', bookingId });
+  res.status(201).json({ 
+    success: true, 
+    message: 'Booking confirmed', 
+    bookingId, 
+    newCoins: finalCoinBalance 
+  });
 });
 
 /**

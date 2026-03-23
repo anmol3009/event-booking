@@ -7,6 +7,9 @@ const useStore = create((set, get) => ({
   user: null,
   isLoggedIn: false,
   login: (userData) => set({ user: userData, isLoggedIn: true }),
+  updateUser: (updates) => set((state) => ({ 
+    user: state.user ? { ...state.user, ...updates } : null 
+  })),
   logout: () => {
     // Sign out from Firebase so the token is invalidated
     signOut(auth).catch(() => {});

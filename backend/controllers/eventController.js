@@ -75,23 +75,32 @@ const createEvent = asyncHandler(async (req, res) => {
   const vipPrice = vipTier ? parseFloat(vipTier.price) : 1500;
   const genPrice = genTier ? parseFloat(genTier.price) : 500;
 
-  await generateSeats(eventRef.id, vipPrice, genPrice, premiumPrice);
+  let actualAvailable = parsedTotal;
+  try {
+    await generateSeats(eventRef.id, vipPrice, genPrice, premiumPrice);
 
-  // Update availableSeats to the actual generated count (minus pre-booked demo seats)
-  // We get the real count after generation by querying available seats
-  const availableSnap = await db
-    .collection('events')
-    .doc(eventRef.id)
-    .collection('seats')
-    .where('status', '==', 'available')
-    .get();
-
-  await eventRef.update({ availableSeats: availableSnap.size });
+    // Update availableSeats to the actual generated count (minus pre-booked demo seats)
+    const availableSnap = await db
+      .collection('events')
+      .doc(eventRef.id)
+      .collection('seats')
+      .where('status', '==', 'available')
+      .get();
+    
+    actualAvailable = availableSnap.size;
+    await eventRef.update({ availableSeats: actualAvailable });
+  } catch (err) {
+    console.error(`[EventController] Seat generation failed for event ${eventRef.id}:`, err.message);
+    // If it's a quota error, we still want the event to exist, but seats might be missing
+    if (err.message.includes('RESOURCE_EXHAUSTED')) {
+      console.warn('[EventController] Firestore quota exceeded during seat generation.');
+    }
+  }
 
   res.status(201).json({
     success: true,
-    message: 'Event created successfully',
-    event: { ...eventData, availableSeats: availableSnap.size },
+    message: 'Event created successfully' + (actualAvailable === 0 ? ' (Warning: Seat generation failed)' : ''),
+    event: { ...eventData, availableSeats: actualAvailable },
   });
 });
 
