@@ -1,0 +1,142 @@
+const { db } = require('../config/firebase');
+const asyncHandler = require('../utils/asyncHandler');
+const { generateSeats } = require('../services/seatService');
+
+/**
+ * POST /api/events
+ * Auth required. Accepts multipart/form-data with images + event fields.
+ * Uploaded images arrive as req.files (handled by multer+cloudinary middleware).
+ */
+const createEvent = asyncHandler(async (req, res) => {
+  const { uid } = req.user;
+  const { title, description, date, venue, totalSeats } = req.body;
+  let { tiers } = req.body;
+
+  // Basic validation
+  if (!title || !description || !date || !venue) {
+    return res.status(400).json({ success: false, message: 'title, description, date and venue are required' });
+  }
+
+  // Parse tiers if sent as a JSON string (typical for multipart/form-data)
+  if (typeof tiers === 'string') {
+    try {
+      tiers = JSON.parse(tiers);
+    } catch (e) {
+      tiers = [];
+    }
+  }
+
+  // Collect Cloudinary URLs from uploaded files (req.files populated by multer)
+  const images = (req.files || []).map(f => f.path);
+
+  // Create the event document
+  const eventRef = db.collection('events').doc();
+  const parsedTotal = parseInt(totalSeats, 10) || 260;
+
+  // Calculate base price (lowest price among tiers)
+  let basePrice = 500;
+  if (Array.isArray(tiers) && tiers.length > 0) {
+    const prices = tiers.map(t => parseFloat(t.price)).filter(p => !isNaN(p));
+    if (prices.length > 0) basePrice = Math.min(...prices);
+  } else {
+    // Fallback if no tiers provided
+    tiers = [
+      { name: 'General', price: 500, seats: Math.floor(parsedTotal * 0.7) },
+      { name: 'VIP', price: 1500, seats: parsedTotal - Math.floor(parsedTotal * 0.7) }
+    ];
+  }
+
+  const eventData = {
+    eventId:        eventRef.id,
+    title,
+    description,
+    date,
+    venue,
+    images,
+    createdBy:      uid,
+    totalSeats:     parsedTotal,
+    availableSeats: parsedTotal,
+    price:          basePrice,
+    tiers:          tiers,
+    createdAt:      new Date().toISOString(),
+  };
+  await eventRef.set(eventData);
+
+  // Auto-generate seats based on tiers if possible, or fallback to default
+  const vipTier = tiers.find(t => t.name.toUpperCase() === 'VIP');
+  const genTier = tiers.find(t => t.name.toUpperCase() === 'GENERAL' || t.name.toUpperCase() === 'STANDARD');
+  
+  const vipPrice = vipTier ? parseFloat(vipTier.price) : 1500;
+  const genPrice = genTier ? parseFloat(genTier.price) : 500;
+
+  await generateSeats(eventRef.id, vipPrice, genPrice);
+
+  // Update availableSeats to the actual generated count (minus pre-booked demo seats)
+  // We get the real count after generation by querying available seats
+  const availableSnap = await db
+    .collection('events')
+    .doc(eventRef.id)
+    .collection('seats')
+    .where('status', '==', 'available')
+    .get();
+
+  await eventRef.update({ availableSeats: availableSnap.size });
+
+  res.status(201).json({
+    success: true,
+    message: 'Event created successfully',
+    event: { ...eventData, availableSeats: availableSnap.size },
+  });
+});
+
+/**
+ * GET /api/events
+ * Returns all events, with optional date filtering.
+ * Query params: ?date=2025-08-01 or ?startDate=2025-08-01&endDate=2025-08-31
+ */
+const getEvents = asyncHandler(async (req, res) => {
+  const { date, startDate, endDate } = req.query;
+  let query = db.collection('events').orderBy('date', 'asc');
+
+  if (date) {
+    // Exact date match (events on this day)
+    query = query.where('date', '>=', date).where('date', '<', date + 'T23:59:59');
+  } else if (startDate && endDate) {
+    query = query.where('date', '>=', startDate).where('date', '<=', endDate);
+  }
+
+  const snap = await query.get();
+  const events = snap.docs.map(d => d.data());
+
+  res.status(200).json({ success: true, count: events.length, events });
+});
+
+/**
+ * GET /api/events/:eventId
+ * Returns full event details plus the complete seat map.
+ */
+const getEventById = asyncHandler(async (req, res) => {
+  const { eventId } = req.params;
+
+  const eventSnap = await db.collection('events').doc(eventId).get();
+  if (!eventSnap.exists) {
+    return res.status(404).json({ success: false, message: 'Event not found' });
+  }
+
+  // Fetch all seats for this event
+  const seatsSnap = await db
+    .collection('events')
+    .doc(eventId)
+    .collection('seats')
+    .get();
+
+  const seats = seatsSnap.docs.map(d => d.data());
+
+  res.status(200).json({
+    success: true,
+    event: eventSnap.data(),
+    seats,
+  });
+});
+
+module.exports = { createEvent, getEvents, getEventById };

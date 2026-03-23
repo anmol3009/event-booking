@@ -1,0 +1,222 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+@theme {
+  /* DARK THEME (default) — pure black like bridgeworx */
+  --color-bg: #000000;
+  --color-bg-card: #0a0a0a;
+  --color-bg-elevated: #141414;
+  --color-bg-surface: #1a1a1a;
+  --color-border: #222222;
+  --color-border-light: #333333;
+
+  /* ACCENT — teal/cyan inspired by bridgeworx */
+  --color-accent: #7DA8CF;
+  --color-accent-hover: #9BC2E6;
+  --color-accent-muted: rgba(125, 168, 207, 0.15);
+
+  --color-teal-400: #2DD4BF;
+  --color-teal-500: #14B8A6;
+  --color-cyan-300: #67E8F9;
+
+  --color-purple-400: #A78BFA;
+  --color-purple-dark: #2F1A42;
+
+  --color-green-400: #4ADE80;
+  --color-green-500: #22C55E;
+  --color-amber-400: #FBBF24;
+  --color-amber-500: #F59E0B;
+  --color-red-400: #F87171;
+  --color-red-500: #EF4444;
+  --color-blue-400: #60A5FA;
+
+  --color-coral-500: #E11D48;
+  --color-coral-400: #F43F5E;
+
+  --font-heading: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ───── BASE ───── */
+@layer base {
+  body {
+    @apply font-body antialiased;
+    margin: 0;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+
+  * {
+    scrollbar-width: thin;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar for dark/light */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+  }
+
+  /* Selection highlight */
+  ::selection {
+    background: rgba(125, 168, 207, 0.3);
+    color: inherit;
+  }
+}
+
+/* ───── COMPONENTS ───── */
+@layer components {
+  .btn-primary {
+    @apply font-semibold py-2.5 px-6 rounded transition-all duration-300 cursor-pointer border-none;
+    background: #7DA8CF;
+    color: #000;
+  }
+  .btn-primary:hover {
+    background: #9BC2E6;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(125, 168, 207, 0.3);
+  }
+
+  .btn-danger {
+    @apply bg-red-500 text-white font-semibold py-2 px-4 rounded transition-all duration-200 cursor-pointer border-none;
+  }
+
+  .btn-outline {
+    @apply font-semibold py-2 px-4 rounded transition-all duration-300 cursor-pointer bg-transparent;
+    border: 1px solid #7DA8CF;
+    color: #7DA8CF;
+  }
+  .btn-outline:hover {
+    background: #7DA8CF;
+    color: #000;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(125, 168, 207, 0.2);
+  }
+
+  .btn-green {
+    @apply bg-green-500 text-white font-semibold py-2 px-4 rounded transition-all duration-200 cursor-pointer border-none;
+  }
+
+  .btn-amber {
+    @apply bg-amber-500 text-white font-semibold py-2 px-4 rounded transition-all duration-200 cursor-pointer border-none;
+  }
+
+  .btn-coral {
+    @apply text-white font-bold py-3.5 px-6 rounded-lg transition-all duration-200 cursor-pointer border-none;
+    background: linear-gradient(135deg, #E11D48, #F43F5E);
+  }
+
+  /* bridgeworx-style link button */
+  .link-more {
+    @apply text-sm font-medium transition-all duration-500 cursor-pointer inline-flex items-center gap-1;
+    color: #7DA8CF;
+    border-bottom: 1px solid transparent;
+  }
+  .link-more:hover {
+    border-bottom-color: #7DA8CF;
+  }
+}
+
+@layer utilities {
+  .grayscale-hover {
+    filter: grayscale(100%);
+    transition: filter 0.5s ease, transform 0.5s ease;
+  }
+  .group:hover .grayscale-hover {
+    filter: grayscale(0%);
+    transform: scale(1.05);
+  }
+}
+
+/* ───── 3D TILT EFFECT ───── */
+.tilt-card {
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+.tilt-card:hover {
+  box-shadow: 0 25px 60px rgba(125, 168, 207, 0.15), 0 0 0 1px rgba(125, 168, 207, 0.1);
+}
+
+/* ───── GLASS MORPHISM ───── */
+.glass {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* ───── INFINITE MARQUEE RIBBON ───── */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 30s linear infinite;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* ───── GLOW PULSE ───── */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 5px rgba(125, 168, 207, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(125, 168, 207, 0.4); }
+}
+.glow-pulse {
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+/* ───── SHIMMER LOADING EFFECT ───── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent 30%, rgba(125, 168, 207, 0.08) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* ───── FLOATING ANIMATION ───── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+.float-animation {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* ───── GRADIENT TEXT ───── */
+.gradient-text {
+  background: linear-gradient(135deg, #7DA8CF, #A78BFA, #67E8F9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ───── NOISE TEXTURE OVERLAY ───── */
+.noise-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
