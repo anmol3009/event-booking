@@ -1,21 +1,61 @@
+import { useState, useEffect } from 'react';
 import useTheme from '../../store/useTheme';
 
-const items = [
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+const fallbackItems = [
   'Arijit Singh Live — 12 Apr',
   'Zakir Khan Comedy Night — 20 Apr',
   'Tech Fest 2026 — 12 Apr',
   'EDM Festival — 10 Apr',
   'IPL Screening — 10 Apr',
+];
+
+const featureItems = [
+  'Secure Payments',
+  'Automated Waitlist',
   'Zero Double Bookings',
   'Smart Resale Marketplace',
   'Real-Time Seat Booking',
-  'Automated Waitlist',
-  'Secure Payments',
+  '24/7 Customer Support',
 ];
 
 export default function MarqueeRibbon() {
   const { mode } = useTheme();
   const isDark = mode === 'dark';
+  const [items, setItems] = useState(fallbackItems);
+
+  useEffect(() => {
+    const loadEvents = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/events`);
+        if (!response.ok) throw new Error('Failed to load events');
+        const data = await response.json();
+        const now = new Date();
+
+        const upcomingEvents = (data.events || [])
+          .filter((event) => {
+            const eventDate = new Date(event.date);
+            // treat event as current/upcoming from today's start onwards
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            return eventDate >= today;
+          })
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+          .map((event) => `${event.title} — ${event.date}`);
+
+        if (upcomingEvents.length > 0) {
+          setItems([...upcomingEvents.slice(0, 8), ...featureItems]);
+        } else {
+          setItems([...fallbackItems, ...featureItems]);
+        }
+      } catch (err) {
+        // Keep fallback items if fetch fails.
+        setItems([...fallbackItems, ...featureItems]);
+      }
+    };
+
+    loadEvents();
+  }, []);
 
   const separator = (
     <span

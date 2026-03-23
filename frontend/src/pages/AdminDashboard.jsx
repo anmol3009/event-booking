@@ -77,6 +77,7 @@ function EventAnalyticsView({ analytics, isDark }) {
     { label: 'Tickets Sold', value: analytics.bookings?.confirmed || 0, icon: Ticket,     color: '#4ADE80' },
     { label: 'Unsold',       value: analytics.seats?.available   || 0, icon: Users,       color: '#3B82F6' },
     { label: 'Cancelled',    value: analytics.bookings?.cancelled || 0, icon: TrendingUp,  color: '#F59E0B' },
+    { label: 'Resold',       value: analytics.bookings?.resold    || 0, icon: BarChart3,  color: '#F43F5E' },
     { label: 'Revenue',      value: Math.round((analytics.revenue?.total || 0) / 1000),
       icon: DollarSign, color: '#7DA8CF', prefix: '₹', suffix: 'K' },
   ];
@@ -97,7 +98,7 @@ function EventAnalyticsView({ analytics, isDark }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-8">
         {cards.map((card, i) => (
           <motion.div key={card.label} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
             className="rounded-lg border p-4" style={{ borderColor: isDark ? '#1a1a1a' : '#eee', background: isDark ? '#0a0a0a' : '#fafafa' }}>
@@ -110,31 +111,65 @@ function EventAnalyticsView({ analytics, isDark }) {
         ))}
       </div>
 
-      {tierBreakdown.length > 0 && (
-        <div className="rounded-lg border p-5" style={{ borderColor: isDark ? '#1a1a1a' : '#eee', background: isDark ? '#0a0a0a' : '#fafafa' }}>
-          <h4 className="text-xs uppercase tracking-widest font-bold mb-4" style={{ color: '#7DA8CF' }}>Seat Category Breakdown</h4>
-          <div className="h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={tierBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value">
-                  {tierBreakdown.map((entry, index) => (
-                    <Cell key={index} fill={entry.fill} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={tooltipStyle} />
-              </PieChart>
-            </ResponsiveContainer>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {tierBreakdown.length > 0 && (
+          <div className="rounded-lg border p-5" style={{ borderColor: isDark ? '#1a1a1a' : '#eee', background: isDark ? '#0a0a0a' : '#fafafa' }}>
+            <h4 className="text-xs uppercase tracking-widest font-bold mb-4" style={{ color: '#7DA8CF' }}>Seat Category Breakdown</h4>
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={tierBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value">
+                    {tierBreakdown.map((entry, index) => (
+                      <Cell key={index} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-wrap justify-center gap-4 mt-2">
+              {tierBreakdown.map(item => (
+                <div key={item.name} className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm" style={{ background: item.fill }} />
+                  <span className="text-[11px]" style={{ color: isDark ? '#666' : '#999' }}>{item.name} ({item.value})</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap justify-center gap-4 mt-2">
-            {tierBreakdown.map(item => (
-              <div key={item.name} className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: item.fill }} />
-                <span className="text-[11px]" style={{ color: isDark ? '#666' : '#999' }}>{item.name} ({item.value})</span>
+        )}
+
+        {analytics.dailySales?.length > 0 && (
+          <div className="rounded-lg border p-5" style={{ borderColor: isDark ? '#1a1a1a' : '#eee', background: isDark ? '#0a0a0a' : '#fafafa' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-xs uppercase tracking-widest font-bold" style={{ color: '#7DA8CF' }}>Daily Sales Trend</h4>
+              <span className="text-xs text-blue-400">Last {analytics.dailySales.length} days</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="p-2 rounded-lg" style={{ background: isDark ? '#111' : '#fff' }}>
+                <p className="text-[10px] text-gray-400">Total</p>
+                <p className="text-lg font-bold">₹{analytics.dailySales.reduce((s, i) => s + i.revenue, 0).toLocaleString()}</p>
               </div>
-            ))}
+              <div className="p-2 rounded-lg" style={{ background: isDark ? '#111' : '#fff' }}>
+                <p className="text-[10px] text-gray-400">Highest Day</p>
+                <p className="text-lg font-bold">₹{Math.max(...analytics.dailySales.map((i) => i.revenue)).toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={analytics.dailySales} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1a1a1a' : '#eee'} />
+                  <XAxis dataKey="date" tick={{ fill: isDark ? '#aaa' : '#666', fontSize: 12 }} />
+                  <YAxis tickFormatter={(v) => `₹${Math.round(v / 1000)}k`} tick={{ fill: isDark ? '#aaa' : '#666', fontSize: 12 }} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`₹${value.toLocaleString()}`, 'Revenue']} />
+                  <Area type="monotone" dataKey="revenue" stroke="#7DA8CF" fill="#7DA8CF" fillOpacity={0.2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

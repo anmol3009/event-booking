@@ -51,6 +51,26 @@ const getEventAnalytics = asyncHandler(async (req, res) => {
 
   const totalRevenue = confirmed.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
 
+  // Resold ticket count and basic daily sales aggregation
+  const resoldCount = confirmed.filter(b => b.fromResale).length;
+
+  const dailySales = {};
+  confirmed.forEach(b => {
+    let day = 'unknown';
+    try {
+      const dayDate = new Date(b.createdAt);
+      if (!isNaN(dayDate)) {
+        day = dayDate.toISOString().split('T')[0];
+      }
+    } catch (e) {
+      day = 'unknown';
+    }
+    dailySales[day] = (dailySales[day] || 0) + (b.totalAmount || 0);
+  });
+
+  const sortedDays = Object.keys(dailySales).sort();
+  const dailySalesArray = sortedDays.map((key) => ({ date: key, revenue: dailySales[key] }));
+
   // Waitlist count
   const waitlistSnap = await db
     .collection('waitlist')
@@ -75,6 +95,7 @@ const getEventAnalytics = asyncHandler(async (req, res) => {
       bookings: {
         confirmed: confirmed.length,
         cancelled: cancelled.length,
+        resold:    resoldCount,
       },
       revenue: {
         total:    totalRevenue,
@@ -85,6 +106,7 @@ const getEventAnalytics = asyncHandler(async (req, res) => {
         general: { total: generalTotal, booked: generalBooked },
       },
       waitlistCount: waitlistSnap.size,
+      dailySales: dailySalesArray,
     },
   });
 });
