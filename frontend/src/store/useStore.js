@@ -21,6 +21,10 @@ const useStore = create((set, get) => ({
     if (selectedSeats.includes(seatIndex)) {
       set({ selectedSeats: selectedSeats.filter((s) => s !== seatIndex) });
     } else {
+      // Enforce 4-seat limit per user per booking
+      if (selectedSeats.length >= 4) {
+        return; // Silently ignore, or toast will handle it in component
+      }
       set({ selectedSeats: [...selectedSeats, seatIndex] });
     }
   },

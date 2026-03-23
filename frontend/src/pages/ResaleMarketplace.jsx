@@ -108,8 +108,8 @@ function SeatMapModal({ ticket, onClose, isDark }) {
           </div>
         </div>
 
-        {/* Seat grid */}
-        <div className="overflow-auto pb-2">
+        {/* Seat grid with enhanced styling */}
+        <div className="overflow-auto pb-4 rounded-lg" style={{ background: isDark ? 'linear-gradient(135deg, #111 0%, #0a0a0a 100%)' : 'linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)', border: `1px solid ${isDark ? '#1a1a1a' : '#eee'}`, padding: '16px' }}>
           <div className="mx-auto" style={{ width: 'fit-content' }}>
             {rows.map((row) => {
               const seatsArr = Array.from({ length: row.seats }, (_, i) => row.startIndex + i);
@@ -117,59 +117,65 @@ function SeatMapModal({ ticket, onClose, isDark }) {
               const blocks = [seatsArr.slice(0, blockSize), seatsArr.slice(blockSize, blockSize * 2), seatsArr.slice(blockSize * 2)];
 
               return (
-                <div key={row.label} className="flex items-center justify-center mb-[2px]">
-                  <span className="w-4 text-[8px] font-mono text-right mr-1.5 shrink-0" style={{ color: isDark ? '#333' : '#ccc' }}>
+                <motion.div 
+                  key={row.label} 
+                  className="flex items-center justify-center mb-2.5 transition-all duration-200"
+                  whileHover={{ scale: 1.02 }}
+                >
+                  <span className="w-5 text-[9px] font-bold text-right mr-2 shrink-0" style={{ color: row.color, letterSpacing: '0.05em' }}>
                     {row.label}
                   </span>
                   {blocks.map((block, bi) => (
                     <div key={bi} className="flex items-center">
-                      <div className="flex gap-[2px]">
+                      <div className="flex gap-[3px]">
                         {block.map((idx) => {
                           const isSellerSeat = idx === ticket.seatIndex;
                           return (
-                            <div
+                            <motion.div
                               key={idx}
-                              className="transition-all duration-300"
+                              whileHover={isSellerSeat ? { scale: 1.5, y: -4 } : {}}
+                              className="transition-all duration-300 rounded-sm cursor-pointer"
                               style={{
-                                width: 14,
-                                height: 14,
-                                borderRadius: 2,
+                                width: 16,
+                                height: 16,
+                                borderRadius: 3,
                                 background: isSellerSeat ? '#FFFFFF' : row.color,
-                                opacity: isSellerSeat ? 1 : 0.15,
-                                boxShadow: isSellerSeat ? `0 0 12px #fff, 0 0 4px ${row.color}, 0 0 20px ${row.color}` : 'none',
+                                opacity: isSellerSeat ? 1 : 0.2,
+                                boxShadow: isSellerSeat ? `0 0 16px ${row.color}, 0 0 6px #fff, 0 4px 12px rgba(0,0,0,0.3)` : 'none',
                                 border: isSellerSeat ? `2px solid ${row.color}` : 'none',
-                                transform: isSellerSeat ? 'scale(1.6)' : 'scale(1)',
+                                transform: isSellerSeat ? 'scale(1.8)' : 'scale(1)',
                                 zIndex: isSellerSeat ? 10 : 1,
                                 position: 'relative',
                               }}
+                              title={isSellerSeat ? `${row.label}${(bi * blockSize) + block.indexOf(idx) + 1} — Your Ticket` : `${row.label}${(bi * blockSize) + block.indexOf(idx) + 1}`}
                             />
                           );
                         })}
                       </div>
-                      {bi < 2 && <div style={{ width: 10 }} />}
+                      {bi < 2 && <div style={{ width: 12 }} />}
                     </div>
                   ))}
-                  <span className="w-4 text-[8px] font-mono ml-1.5 shrink-0" style={{ color: isDark ? '#333' : '#ccc' }}>
+                  <span className="w-5 text-[9px] font-bold ml-2 shrink-0" style={{ color: row.color, letterSpacing: '0.05em' }}>
                     {row.label}
                   </span>
-                </div>
+                </motion.div>
               );
             })}
           </div>
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap justify-center gap-4 mt-5 mb-4">
+        <div className="flex flex-wrap justify-center gap-3 mt-6 p-4 rounded-lg" style={{ background: isDark ? '#0a0a0a' : '#f9f9f9', border: `1px solid ${isDark ? '#1a1a1a' : '#eee'}` }}>
           {event.tiers.map((t) => (
-            <div key={t.name} className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: TIER_COLORS[t.name] || '#2DD4BF' }} />
-              <span className="text-[10px]" style={{ color: isDark ? '#666' : '#999' }}>{t.name}</span>
-            </div>
+            <motion.div key={t.name} className="flex items-center gap-2" whileHover={{ scale: 1.05 }}>
+              <span className="w-3 h-3 rounded-sm" style={{ background: TIER_COLORS[t.name] || '#2DD4BF', boxShadow: `0 0 8px ${TIER_COLORS[t.name] || '#2DD4BF'}33` }} />
+              <span className="text-[10px] font-medium" style={{ color: isDark ? '#666' : '#999' }}>{t.name}</span>
+            </motion.div>
           ))}
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#fff', border: '1px solid #555' }} />
+          <motion.div className="flex items-center gap-2" whileHover={{ scale: 1.05 }}>
+            <span className="w-3 h-3 rounded-sm" style={{ background: '#fff', boxShadow: '0 0 8px rgba(255,255,255,0.3)', border: `1.5px solid ${isDark ? '#555' : '#ccc'}` }} />
             <span className="text-[10px] font-bold" style={{ color: '#7DA8CF' }}>This Ticket</span>
-          </div>
+          </motion.div>
         </div>
 
         {/* Ticket info bar */}

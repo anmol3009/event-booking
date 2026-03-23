@@ -189,12 +189,23 @@ export default function EventCalendar() {
                       {day}
                     </span>
 
-                    {/* Event count badge */}
+                    {/* Event list preview (top 3) */}
                     {hasEvent && (
-                      <div className="mt-auto">
-                        <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm" style={{ background: '#7DA8CF', color: '#000' }}>
-                          {events.length} event{events.length > 1 ? 's' : ''}
-                        </span>
+                      <div className="mt-1 space-y-0.5 overflow-hidden" style={{ maxHeight: '55px' }}>
+                        {events.slice(0, 3).map((ev, idx) => (
+                          <div
+                            key={`${ev.id}-${idx}`}
+                            className="text-[10px] leading-tight font-semibold truncate"
+                            style={{ color: '#fff', opacity: 0.95 }}
+                          >
+                            • {ev.title}
+                          </div>
+                        ))}
+                        {events.length > 3 && (
+                          <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#fff' }}>
+                            +{events.length - 3} more
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

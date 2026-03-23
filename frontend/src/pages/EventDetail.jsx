@@ -20,15 +20,26 @@ const TIER_COLORS = {
 function generateVenueLayout(totalSeats, tiers) {
   const sections = [];
   const seatsPerRow = 16;
-  const tierNames = tiers.map((t) => t.name);
 
-  // Assign tiers to rows: front rows = Premium, middle = VIP, back = General, last = Held
-  const totalRows = Math.ceil(totalSeats / seatsPerRow);
-  const tierRanges = {};
-  const premiumRows = Math.max(2, Math.floor(totalRows * 0.15));
-  const vipRows = Math.max(2, Math.floor(totalRows * 0.25));
-  const heldRows = Math.max(1, Math.floor(totalRows * 0.1));
-  const generalRows = totalRows - premiumRows - vipRows - heldRows;
+  // Normalize tiers to preserve General/VIP/Premium in legend and layout.
+  const menuTiers = ['Premium', 'VIP', 'General'];
+  const normalizedTiers = menuTiers.map((name) => {
+    const found = tiers.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    return found || { name, price: 0 };
+  });
+
+  // Prepare row labels A-Z, excluding M (user requested removal of section M) so layout does not render M.
+  const allRowLabels = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).filter((label) => label !== 'M');
+  const totalRows = Math.min(Math.ceil(totalSeats / seatsPerRow), allRowLabels.length);
+  const premiumRows = Math.max(2, Math.floor(totalRows * 0.2));
+  const vipRows = Math.max(2, Math.floor(totalRows * 0.3));
+  const generalRows = totalRows - premiumRows - vipRows;
+
+  const getTier = (index) => {
+    if (index < premiumRows) return 'Premium';
+    if (index < premiumRows + vipRows) return 'VIP';
+    return 'General';
+  };
 
   let currentRow = 0;
 
@@ -36,14 +47,10 @@ function generateVenueLayout(totalSeats, tiers) {
   const groundTotal = Math.min(totalRows, Math.ceil(totalRows * 0.5));
   const groundRowsArr = [];
   for (let r = 0; r < groundTotal; r++) {
-    let tier;
-    if (currentRow < premiumRows) tier = 'Premium';
-    else if (currentRow < premiumRows + vipRows) tier = 'VIP';
-    else tier = 'General';
-
+    const tier = getTier(currentRow);
     const seatCount = r < 2 ? seatsPerRow - 4 : r < 4 ? seatsPerRow - 2 : seatsPerRow;
     groundRowsArr.push({
-      label: String.fromCharCode(65 + currentRow),
+      label: allRowLabels[currentRow],
       seats: seatCount,
       tier,
       color: TIER_COLORS[tier] || '#2DD4BF',
@@ -61,7 +68,6 @@ function generateVenueLayout(totalSeats, tiers) {
     for (let r = 0; r < balc1Total; r++) {
       let tier;
       if (currentRow < premiumRows + vipRows) tier = 'VIP';
-      else if (currentRow >= totalRows - heldRows) tier = 'Held';
       else tier = 'General';
 
       balcRows.push({
@@ -81,7 +87,7 @@ function generateVenueLayout(totalSeats, tiers) {
   if (remaining > 0) {
     const balc2Rows = [];
     for (let r = 0; r < remaining; r++) {
-      const tier = currentRow >= totalRows - heldRows ? 'Held' : 'General';
+      const tier = 'General';
       balc2Rows.push({
         label: String.fromCharCode(65 + currentRow),
         seats: seatsPerRow - 4,
@@ -96,49 +102,141 @@ function generateVenueLayout(totalSeats, tiers) {
   return sections;
 }
 
-function SeatLegend({ isDark, tiers }) {
+function SeatLegend({ isDark, tiers, seatStates, venueLayout, selectedTier, onTierSelect }) {
+  // Calculate availability per tier
+  const tierData = useMemo(() => {
+    const counts = {};
+    const available = {};
+
+    // Initialize counts
+    tiers.forEach((t) => {
+      counts[t.name] = 0;
+      available[t.name] = 0;
+    });
+
+    // Build seat index to tier mapping
+    const seatToTier = {};
+    let seatIndex = 0;
+    venueLayout.forEach((section) => {
+      section.rows.forEach((row) => {
+        for (let i = 0; i < row.seats; i++) {
+          seatToTier[seatIndex + i] = row.tier;
+        }
+        counts[row.tier] = (counts[row.tier] || 0) + row.seats;
+        seatIndex += row.seats;
+      });
+    });
+
+    // Count available seats
+    Object.keys(seatStates).forEach((seatIdx) => {
+      const idx = parseInt(seatIdx);
+      const tier = seatToTier[idx];
+      if (tier && seatStates[seatIdx] === 'available') {
+        available[tier]++;
+      }
+    });
+
+    return { counts, available };
+  }, [seatStates, venueLayout, tiers]);
+
   return (
-    <div className="flex flex-wrap justify-center gap-5 mt-5">
-      {tiers.map((t) => (
-        <div key={t.name} className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-sm" style={{ background: TIER_COLORS[t.name] || '#2DD4BF' }} />
-          <span className="text-[11px] font-medium" style={{ color: isDark ? '#888' : '#666' }}>
-            {t.name} — ₹{t.price}
-          </span>
-        </div>
-      ))}
-      <div className="flex items-center gap-2">
-        <span className="w-3 h-3 rounded-sm" style={{ background: isDark ? '#222' : '#ddd' }} />
-        <span className="text-[11px] font-medium" style={{ color: isDark ? '#888' : '#666' }}>Booked</span>
+    <div>
+      <h3 className="text-xs uppercase tracking-widest font-bold mb-4" style={{ color: '#7DA8CF' }}>Seat Availability</h3>
+      <div className="space-y-3">
+        {tiers.map((t) => {
+          const isSelected = selectedTier === t.name;
+          return (
+            <motion.button
+              key={t.name}
+              onClick={() => onTierSelect(isSelected ? null : t.name)}
+              className="w-full rounded-lg p-4 border transition-all duration-200 cursor-pointer text-left"
+              whileHover={{ scale: 1.02, x: 4 }}
+              whileTap={{ scale: 0.98 }}
+              style={{
+                background: isSelected ? (isDark ? 'rgba(125,168,207,0.15)' : 'rgba(125,168,207,0.1)') : (isDark ? '#111' : '#fff'),
+                border: `2px solid ${isSelected ? (TIER_COLORS[t.name] || '#2DD4BF') : (isDark ? '#1a1a1a' : '#eee')}`,
+                boxShadow: isSelected ? `0 0 16px ${TIER_COLORS[t.name] || '#2DD4BF'}44` : 'none',
+              }}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-sm" style={{ background: TIER_COLORS[t.name] || '#2DD4BF', boxShadow: isSelected ? `0 0 12px ${TIER_COLORS[t.name] || '#2DD4BF'}` : `0 0 8px ${TIER_COLORS[t.name] || '#2DD4BF'}33` }} />
+                  <span className="text-[12px] uppercase tracking-wider font-bold" style={{ color: isDark ? '#ccc' : '#444' }}>{t.name}</span>
+                </div>
+                <span className="text-[10px] font-bold" style={{ color: '#7DA8CF' }}>₹{t.price}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span style={{ color: isDark ? '#666' : '#999' }}>Available</span>
+                <span className="font-bold" style={{ color: TIER_COLORS[t.name] || '#2DD4BF' }}>{tierData.available[t.name] || 0}/{tierData.counts[t.name] || 0}</span>
+              </div>
+            </motion.button>
+          );
+        })}
+        <motion.button
+          onClick={() => onTierSelect(null)}
+          className="w-full rounded-lg p-4 border transition-all duration-200 cursor-pointer text-left"
+          whileHover={{ scale: 1.02, x: 4 }}
+          whileTap={{ scale: 0.98 }}
+          style={{
+            background: !selectedTier ? (isDark ? 'rgba(125,168,207,0.15)' : 'rgba(125,168,207,0.1)') : (isDark ? '#111' : '#fff'),
+            border: `2px solid ${!selectedTier ? '#7DA8CF' : (isDark ? '#1a1a1a' : '#eee')}`,
+            boxShadow: !selectedTier ? `0 0 16px rgba(125,168,207,0.3)` : 'none',
+          }}
+        >
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-sm" style={{ background: isDark ? '#444' : '#ddd', boxShadow: !selectedTier ? `0 0 12px rgba(125,168,207,0.5)` : 'none' }} />
+              <span className="text-[12px] uppercase tracking-wider font-bold" style={{ color: isDark ? '#ccc' : '#444' }}>All Seats</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-[11px]">
+            <span style={{ color: isDark ? '#666' : '#999' }}>View</span>
+            <span className="font-bold" style={{ color: '#7DA8CF' }}>{Object.values(seatStates).filter(s => s === 'available').length} available</span>
+          </div>
+        </motion.button>
       </div>
     </div>
   );
 }
 
-function Seat({ index, status, isSelected, onSelect, isDark, label, tierColor, dimmed }) {
+function Seat({ index, status, isSelected, onSelect, isDark, label, tierColor, isHighlighted }) {
   const getColor = () => {
-    if (isSelected) return '#FFFFFF';
-    if (status === 'booked') return isDark ? '#222' : '#ddd';
-    if (status === 'held') return isDark ? '#1a1a1a' : '#e5e5e5';
-    return tierColor;
+    if (isSelected) return tierColor;
+    if (status === 'booked') return isDark ? '#333' : '#d0d0d0';
+    if (status === 'held') return isDark ? '#222' : '#e8e8e8';
+    return 'transparent';
   };
 
-  const canSelect = status === 'available' && !dimmed;
-
+  const canSelect = status === 'available';
   return (
     <motion.button
-      whileHover={canSelect ? { scale: 1.5, zIndex: 10 } : {}}
-      whileTap={canSelect ? { scale: 0.85 } : {}}
-      onClick={() => !dimmed && (status === 'available' || isSelected) && onSelect(index)}
-      className="rounded-sm border-none transition-all duration-200 relative"
+      whileHover={canSelect ? { scale: 1.6, zIndex: 20, y: -3 } : {}}
+      whileTap={canSelect ? { scale: 0.9 } : {}}
+      onClick={() => (status === 'available' || isSelected) && onSelect(index)}
+
+      className="relative border-none transition-all duration-200 rounded-md focus:outline-none"
       style={{
-        width: 20,
-        height: 20,
+        width: 22,
+        height: 22,
         background: getColor(),
-        opacity: dimmed ? 0.12 : status === 'booked' ? 0.4 : status === 'held' ? 0.2 : 1,
-        cursor: canSelect || isSelected ? 'pointer' : dimmed ? 'default' : 'not-allowed',
-        boxShadow: isSelected ? '0 0 10px #fff, 0 0 3px #fff' : 'none',
-        borderRadius: 3,
+        opacity: status === 'booked' ? 0.45 : status === 'held' ? 0.25 : 1,
+        boxShadow: isSelected 
+          ? `0 0 20px ${tierColor}cc, 0 0 12px ${tierColor}, 0 4px 12px rgba(0,0,0,0.4), inset 0 0 8px rgba(255,255,255,0.3)` 
+          : isHighlighted && canSelect
+          ? `0 0 14px ${tierColor}99, 0 0 8px ${tierColor}66, inset 0 0 4px ${tierColor}44`
+          : canSelect
+          ? `0 0 6px ${tierColor}66`
+          : 'none',
+        borderRadius: 4,
+        border: isSelected 
+          ? `2.5px solid #fff` 
+          : isHighlighted && canSelect
+          ? `1.5px solid ${tierColor}`
+          : canSelect
+          ? `1.5px solid ${tierColor}`
+          : status === 'booked' || status === 'held'
+          ? `1px solid ${isDark ? '#444' : '#999'}`
+          : 'none',
       }}
       title={`${label} — ${status === 'booked' ? 'Booked' : status === 'held' ? 'Held' : 'Available'}`}
     />
@@ -147,20 +245,40 @@ function Seat({ index, status, isSelected, onSelect, isDark, label, tierColor, d
 
 function VenueSection({ section, seatStates, selectedSeats, selectSeat, isDark, highlightTier }) {
   return (
-    <div className="mb-8">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="h-px flex-1" style={{ background: isDark ? '#1a1a1a' : '#e5e5e5' }} />
-        <span className="text-[10px] uppercase tracking-[0.25em] font-bold px-3 py-1 rounded-full" style={{ color: isDark ? '#555' : '#aaa', background: isDark ? '#0a0a0a' : '#f0f0f0' }}>
+    <motion.div 
+      className="mb-10 rounded-lg p-6 backdrop-blur-sm transition-all duration-200"
+      style={{ 
+        background: isDark ? 'linear-gradient(135deg, #111 0%, #0a0a0a 100%)' : 'linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)',
+        border: `1px solid ${isDark ? '#1a1a1a' : '#eee'}`,
+        boxShadow: `0 4px 20px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.05)'}`
+      }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+    >
+      <div className="flex items-center gap-4 mb-6">
+        <div className="h-px flex-1" style={{ background: isDark ? '#1a1a1a' : '#ddd' }} />
+        <motion.span 
+          className="text-[11px] uppercase tracking-[0.3em] font-bold px-4 py-2 rounded-full whitespace-nowrap"
+          style={{ 
+            color: '#7DA8CF', 
+            background: isDark ? '#0a0a0a' : '#f0f0f0',
+            border: `1px solid ${isDark ? '#1a1a1a' : '#ddd'}`
+          }}
+          whileHover={{ scale: 1.05 }}
+        >
           {section.name}
-        </span>
-        <div className="h-px flex-1" style={{ background: isDark ? '#1a1a1a' : '#e5e5e5' }} />
+        </motion.span>
+        <div className="h-px flex-1" style={{ background: isDark ? '#1a1a1a' : '#ddd' }} />
       </div>
 
-      <div className="space-y-[3px]">
+      <div className="space-y-2">
         {section.rows.map((row, rowIdx) => {
           const rowStart = section.startIndex + section.rows.slice(0, rowIdx).reduce((sum, r) => sum + r.seats, 0);
           const seatsArr = Array.from({ length: row.seats }, (_, i) => rowStart + i);
-          const isDimmed = highlightTier && highlightTier !== row.tier;
+          const shouldHide = highlightTier && highlightTier !== row.tier;
+          if (shouldHide) return null;
+          const isHighlightedRow = highlightTier === row.tier;
 
           // Split into 3 blocks with 2 aisles (like BookMyShow)
           const blockSize = Math.ceil(row.seats / 3);
@@ -169,14 +287,21 @@ function VenueSection({ section, seatStates, selectedSeats, selectSeat, isDark, 
           const block3 = seatsArr.slice(blockSize * 2);
 
           return (
-            <div key={row.label} className="flex items-center justify-center">
-              <span className="w-4 text-[9px] font-mono text-right mr-2 shrink-0" style={{ color: isDark ? '#333' : '#ccc' }}>
+            <motion.div 
+              key={row.label} 
+              className="flex items-center justify-center transition-all duration-200 px-3 py-2 rounded-lg"
+              whileHover={{ scale: 1.02 }}
+              style={{
+                background: isHighlightedRow ? (isDark ? 'rgba(125,168,207,0.08)' : 'rgba(125,168,207,0.05)') : 'transparent',
+                borderLeft: isHighlightedRow ? `3px solid ${row.color}` : 'none',
+              }}
+            >
+              <span className="w-6 text-[10px] font-bold text-right mr-3 shrink-0" style={{ color: row.color, letterSpacing: '0.05em' }}>
                 {row.label}
               </span>
-
               {[block1, block2, block3].map((block, bi) => (
                 <div key={bi} className="flex items-center">
-                  <div className="flex gap-[3px]">
+                  <div className="flex gap-[4px]">
                     {block.map((seatIdx, i) => (
                       <Seat
                         key={seatIdx}
@@ -187,22 +312,22 @@ function VenueSection({ section, seatStates, selectedSeats, selectSeat, isDark, 
                         isDark={isDark}
                         label={`${row.label}${(bi * blockSize) + i + 1}`}
                         tierColor={row.color}
-                        dimmed={isDimmed}
+                        isHighlighted={isHighlightedRow}
                       />
                     ))}
                   </div>
-                  {bi < 2 && <div style={{ width: 14 }} />}
+                  {bi < 2 && <div style={{ width: 16 }} />}
                 </div>
               ))}
 
-              <span className="w-4 text-[9px] font-mono ml-2 shrink-0" style={{ color: isDark ? '#333' : '#ccc' }}>
+              <span className="w-6 text-[10px] font-bold ml-3 shrink-0" style={{ color: row.color, letterSpacing: '0.05em' }}>
                 {row.label}
               </span>
-            </div>
+            </motion.div>
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -211,12 +336,27 @@ export default function EventDetail() {
   const navigate = useNavigate();
   const [event, setEvent] = useState(null);
   const [loadingEvent, setLoadingEvent] = useState(true);
-  const { seatStates, initializeSeats, selectedSeats, selectSeat, selectedTier, setSelectedTier } = useStore();
+  const { seatStates, initializeSeats, selectedSeats, selectSeat: storeSelectSeat, selectedTier, setSelectedTier } = useStore();
   const { user } = useStore();
   const { mode } = useTheme();
   const isDark = mode === 'dark';
   const [zoom, setZoom] = useState(1);
   const [processing, setProcessing] = useState(false);
+
+  // Wrapper for selectSeat with 4-seat limit enforcement + toast notification
+  const selectSeat = useCallback((seatIndex) => {
+    if (selectedSeats.includes(seatIndex)) {
+      // Deselecting — always allowed
+      storeSelectSeat(seatIndex);
+    } else {
+      // Attempting to select
+      if (selectedSeats.length >= 4) {
+        toast.error('Maximum 4 seats per booking');
+        return;
+      }
+      storeSelectSeat(seatIndex);
+    }
+  }, [selectedSeats, storeSelectSeat]);
 
   // Fetch event from backend
   useEffect(() => {
@@ -239,8 +379,9 @@ export default function EventDetail() {
           image:      e.images?.[0] || '',
           totalSeats: e.totalSeats,
           tiers:      e.tiers || [
-            { name: 'General', price: e.generalPrice || 500 },
-            { name: 'VIP', price: e.vipPrice || 1500 }
+            { name: 'Premium', price: e.premiumPrice || 2500 },
+            { name: 'VIP', price: e.vipPrice || 1500 },
+            { name: 'General', price: e.generalPrice || 500 }
           ],
         };
         setEvent(normalised);
@@ -350,9 +491,14 @@ export default function EventDetail() {
           className="rounded-lg border p-4 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-3"
           style={{ background: isDark ? '#0a0a0a' : '#fafafa', borderColor: isDark ? '#1a1a1a' : '#eee' }}
         >
-          <p className="text-sm" style={{ color: isDark ? '#888' : '#666' }}>
-            Please select a category of your choice. It will get highlighted on the layout.
-          </p>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm" style={{ color: isDark ? '#888' : '#666' }}>
+              Please select a category of your choice. It will get highlighted on the layout.
+            </p>
+            <p className="text-xs" style={{ color: selectedSeats.length >= 4 ? '#F472B6' : '#7DA8CF' }}>
+              Seats selected: {selectedSeats.length}/4 (Maximum 4 seats per booking)
+            </p>
+          </div>
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4" style={{ color: '#7DA8CF' }} />
             <span className="text-sm font-mono" style={{ color: isDark ? '#ccc' : '#444' }}>{event.totalSeats} seats</span>
@@ -360,36 +506,11 @@ export default function EventDetail() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-          {/* Left — Price tiers (BookMyShow sidebar) */}
+          {/* Left — Seat Availability */}
           <div>
-            <p className="text-[10px] uppercase tracking-widest mb-3" style={{ color: isDark ? '#555' : '#aaa' }}>
-              filter by price
-            </p>
-            <div className="space-y-1">
-              {event.tiers.map((tier) => {
-                const active = (selectedTier || event.tiers[0].name) === tier.name;
-                const color = TIER_COLORS[tier.name] || '#2DD4BF';
-
-                return (
-                  <button
-                    key={tier.name}
-                    onClick={() => setSelectedTier(tier.name)}
-                    className="w-full p-3 text-left cursor-pointer border transition-all duration-200 flex items-center justify-between rounded-lg"
-                    style={{
-                      background: active ? (isDark ? '#0f0f0f' : '#f5f5f5') : 'transparent',
-                      borderColor: active ? color : 'transparent',
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="w-4 h-4 rounded-sm" style={{ background: color }} />
-                      <span className="text-sm font-semibold" style={{ color: isDark ? '#fff' : '#111' }}>
-                        ₹{tier.price}
-                      </span>
-                    </div>
-                    <svg className="w-4 h-4 transition-transform" style={{ color: isDark ? '#444' : '#ccc', transform: active ? 'rotate(180deg)' : 'rotate(0)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
-                  </button>
-                );
-              })}
+            {/* Seat Availability Legend */}
+            <div className="rounded-lg p-4 border" style={{ background: isDark ? '#0a0a0a' : '#f9f9f9', border: `1px solid ${isDark ? '#1a1a1a' : '#eee'}` }}>
+              <SeatLegend isDark={isDark} tiers={event.tiers} seatStates={seatStates} venueLayout={venueLayout} selectedTier={selectedTier} onTierSelect={setSelectedTier} />
             </div>
 
             {/* About */}
@@ -439,6 +560,8 @@ export default function EventDetail() {
                 </div>
               </div>
 
+
+
               {/* Scrollable map */}
               <div className="overflow-auto pb-2" style={{ maxHeight: '55vh' }}>
                 <div
@@ -458,8 +581,6 @@ export default function EventDetail() {
                   ))}
                 </div>
               </div>
-
-              <SeatLegend isDark={isDark} tiers={event.tiers} />
 
               {/* Doors */}
               <div className="flex justify-between mt-4 px-2">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Ticket, X, Calendar, MapPin, Clock, QrCode, Tag } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -342,21 +343,42 @@ export default function MyBookings() {
   const [cancelModal, setCancelModal] = useState(null);
   const [qrModal, setQrModal] = useState(null);
   const [resellModal, setResellModal] = useState(null);
+  const navigate = useNavigate();
   const { mode } = useTheme();
-  const { user } = useStore();
+  const { user, logout } = useStore();
   const isDark = mode === 'dark';
 
   // Fetch real bookings from the backend on mount
   useEffect(() => {
     const fetchBookings = async () => {
+      if (!user?.token) {
+        setBookings([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         // user.token is the Firebase ID token stored after login
         const token = user?.token;
         const res = await fetch(`${API_BASE}/api/bookings/my`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error('Failed to fetch bookings');
+
+        if (!res.ok) {
+          const errText = await res.text();
+          const status = res.status;
+
+          if (status === 401 || status === 403) {
+            // Force logout and redirect to login for re-auth
+            logout();
+            navigate('/auth/login');
+            throw new Error('Unauthorized: login required. Redirecting to login.');
+          }
+
+          throw new Error(`Failed to fetch bookings (${status})` + (errText ? `: ${errText}` : ''));
+        }
+
         const data = await res.json();
 
         // Normalise backend shape → shape the UI expects

@@ -85,12 +85,15 @@ const getListings = asyncHandler(async (req, res) => {
   const { eventId } = req.query;
   let query = db.collection('resaleListings').where('status', '==', 'active');
 
+  const snap = await query.get();
+  let listings = snap.docs.map(d => d.data());
+
   if (eventId) {
-    query = query.where('eventId', '==', eventId);
+    listings = listings.filter(item => item.eventId === eventId);
   }
 
-  const snap = await query.orderBy('createdAt', 'desc').get();
-  const listings = snap.docs.map(d => d.data());
+  // Sort by newest listings first client-side to match previous behavior.
+  listings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   res.status(200).json({ success: true, count: listings.length, listings });
 });

@@ -39,10 +39,14 @@ const createEvent = asyncHandler(async (req, res) => {
     const prices = tiers.map(t => parseFloat(t.price)).filter(p => !isNaN(p));
     if (prices.length > 0) basePrice = Math.min(...prices);
   } else {
-    // Fallback if no tiers provided
+    // Fallback if no tiers provided; includes Premium tier now
+    const premiumSeats = Math.max(1, Math.floor(parsedTotal * 0.1));
+    const vipSeats = Math.max(2, Math.floor(parsedTotal * 0.2));
+    const generalSeats = parsedTotal - premiumSeats - vipSeats;
     tiers = [
-      { name: 'General', price: 500, seats: Math.floor(parsedTotal * 0.7) },
-      { name: 'VIP', price: 1500, seats: parsedTotal - Math.floor(parsedTotal * 0.7) }
+      { name: 'Premium', price: 2500, seats: premiumSeats },
+      { name: 'VIP', price: 1500, seats: vipSeats },
+      { name: 'General', price: 500, seats: Math.max(0, generalSeats) }
     ];
   }
 
@@ -63,13 +67,15 @@ const createEvent = asyncHandler(async (req, res) => {
   await eventRef.set(eventData);
 
   // Auto-generate seats based on tiers if possible, or fallback to default
+  const premiumTier = tiers.find(t => t.name.toUpperCase() === 'PREMIUM');
   const vipTier = tiers.find(t => t.name.toUpperCase() === 'VIP');
   const genTier = tiers.find(t => t.name.toUpperCase() === 'GENERAL' || t.name.toUpperCase() === 'STANDARD');
   
+  const premiumPrice = premiumTier ? parseFloat(premiumTier.price) : 2500;
   const vipPrice = vipTier ? parseFloat(vipTier.price) : 1500;
   const genPrice = genTier ? parseFloat(genTier.price) : 500;
 
-  await generateSeats(eventRef.id, vipPrice, genPrice);
+  await generateSeats(eventRef.id, vipPrice, genPrice, premiumPrice);
 
   // Update availableSeats to the actual generated count (minus pre-booked demo seats)
   // We get the real count after generation by querying available seats
