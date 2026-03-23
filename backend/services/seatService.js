@@ -62,6 +62,7 @@ const generateSeats = async (eventId, vipPrice = 1500, generalPrice = 500, premi
     }
   }
 
+  console.log(`[SeatService] Committing batch for ${seatCounter} seats (Firestore writes) for event: ${eventId}`);
   await batch.commit();
   return seatCounter;
 };

@@ -13,7 +13,15 @@ const getProfile = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'User not found' });
   }
 
-  res.status(200).json({ success: true, user: userSnap.data() });
+  res.status(200).json({ 
+    success: true, 
+    user: {
+      ...userSnap.data(),
+      // Ensure defaults if not present
+      coins: userSnap.data().coins || 0,
+      hasBooked: userSnap.data().hasBooked || false
+    } 
+  });
 });
 
 /**
