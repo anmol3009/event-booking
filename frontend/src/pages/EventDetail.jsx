@@ -406,8 +406,47 @@ export default function EventDetail() {
     return generateVenueLayout(event.totalSeats, event.tiers);
   }, [event]);
 
-  const activeTier = selectedTier ? event?.tiers.find((t) => t.name === selectedTier) : event?.tiers[0];
-  const totalPrice = (activeTier?.price || 0) * selectedSeats.length;
+  const seatPriceMap = useMemo(() => {
+    if (!event?.tiers) return {};
+    return event.tiers.reduce((acc, tier) => {
+      acc[tier.name] = Number(tier.price) || 0;
+      return acc;
+    }, {});
+  }, [event?.tiers]);
+
+  const seatTierByIndex = useMemo(() => {
+    const map = {};
+    let pointer = 0;
+    venueLayout.forEach((section) => {
+      section.rows.forEach((row) => {
+        for (let seat = 0; seat < row.seats; seat++) {
+          map[pointer] = row.tier;
+          pointer += 1;
+        }
+      });
+    });
+    return map;
+  }, [venueLayout]);
+
+  const selectedSeatsTotal = useMemo(() => {
+    if (!selectedSeats?.length) return 0;
+    return selectedSeats.reduce((sum, seatIndex) => {
+      const tierName = seatTierByIndex[seatIndex] || selectedTier || (event?.tiers?.[0]?.name);
+      const price = seatPriceMap[tierName] ?? event?.price ?? 0;
+      return sum + price;
+    }, 0);
+  }, [selectedSeats, seatTierByIndex, seatPriceMap, selectedTier, event]);
+
+  const activeTier = (() => {
+    if (selectedSeats.length > 0) {
+      const firstTier = seatTierByIndex[selectedSeats[0]];
+      return event?.tiers?.find((t) => t.name === firstTier) || event?.tiers?.[0];
+    }
+    if (selectedTier) return event?.tiers?.find((t) => t.name === selectedTier);
+    return event?.tiers?.[0];
+  })();
+
+  const totalPrice = selectedSeats.length ? selectedSeatsTotal : (activeTier?.price || event?.price || 0);
 
   const handleProceed = useCallback(async () => {
     if (selectedSeats.length === 0) return;
@@ -438,8 +477,8 @@ export default function EventDetail() {
         state: {
           event,
           seats: selectedSeats,
-          tier: selectedTier || event.tiers[0].name,
-          total: totalPrice || event.tiers[0].price * selectedSeats.length,
+          tier: selectedSeats.length > 0 ? seatTierByIndex[selectedSeats[0]] || (selectedTier || event.tiers[0].name) : (selectedTier || event.tiers[0].name),
+          total: totalPrice,
           holdExpiry: data.holdExpiry
         },
       });
