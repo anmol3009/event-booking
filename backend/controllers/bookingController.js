@@ -167,7 +167,11 @@ const getMyBookings = asyncHandler(async (req, res) => {
     .where('userId', '==', uid)
     .get();
 
-  const bookings = await Promise.all(bookingsSnap.docs.map(async (doc) => {
+  const bookingDocs = bookingsSnap.docs.sort((a, b) => 
+    new Date(b.data().createdAt) - new Date(a.data().createdAt)
+  );
+
+  const bookings = await Promise.all(bookingDocs.map(async (doc) => {
     const booking = doc.data();
 
     // Fetch event details
@@ -218,6 +222,9 @@ const cancelBooking = asyncHandler(async (req, res) => {
 
   if (booking.status === 'cancelled') {
     return res.status(400).json({ success: false, message: 'Booking is already cancelled' });
+  }
+  if (booking.status === 'resold') {
+    return res.status(400).json({ success: false, message: 'Booking has already been resold' });
   }
 
   const { eventId, seats } = booking;

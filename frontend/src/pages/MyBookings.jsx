@@ -219,8 +219,16 @@ function ResellModal({ booking, isDark, onClose, onRefresh }) {
   );
 }
 
-function BookingCard({ booking, isDark, onCancel, onQR, onResell }) {
+function BookingCard({ booking, isDark, onCancel, onQR, onResell, resaleListing, resaleOffers, onOfferAction, offerActionLoading }) {
+  const [offersOpen, setOffersOpen] = useState(false);
   const status = statusConfig[booking.status] || statusConfig.upcoming;
+  const hasSoldTransfer = booking.resoldTo != null;
+
+  const offersList = Array.isArray(resaleOffers) ? resaleOffers : [];
+  const activeOffers = offersList.filter((o) => o.status !== 'rejected');
+  const pendingOffers = activeOffers.filter((o) => o.status === 'pending');
+  const bestOffer = activeOffers.length > 0 ? Math.max(...activeOffers.map((o) => o.offerPrice || 0)) : null;
+  const isListingSold = resaleListing?.status === 'sold';
 
   return (
     <motion.div
@@ -293,11 +301,33 @@ function BookingCard({ booking, isDark, onCancel, onQR, onResell }) {
                 >
                   <QrCode className="w-3.5 h-3.5" /> View Ticket
                 </button>
-                {booking.isReselling ? (
-                   <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-lg border" style={{ borderColor: '#F59E0B', color: '#F59E0B', background: 'rgba(245,158,11,0.1)' }}>
-                     Listing Active
-                   </span>
-                ) : (
+                {booking.isReselling && !isListingSold ? (
+                   <>
+                     <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-lg border" style={{ borderColor: '#F59E0B', color: '#F59E0B', background: 'rgba(245,158,11,0.1)' }}>
+                       Listing Active
+                     </span>
+                     {resaleListing?.price != null && (
+                       <span className="text-[10px] uppercase tracking-wider px-3 py-2 rounded-lg" style={{ background: 'rgba(59,130,246,0.12)', color: '#3B82F6' }}>
+                         Seller price: ₹{Number(resaleListing.price).toLocaleString()}
+                       </span>
+                     )}
+                     <span className="text-[10px] uppercase tracking-wider px-3 py-2 rounded-lg" style={{ background: 'rgba(74,222,128,0.12)', color: '#4ADE80' }}>
+                       {pendingOffers.length} offer(s)
+                     </span>
+                     {bestOffer !== null && (
+                       <span className="text-[10px] uppercase tracking-wider px-3 py-2 rounded-lg" style={{ background: 'rgba(125,168,207,0.12)', color: '#7DA8CF' }}>
+                         Best ₹{bestOffer.toLocaleString()}
+                       </span>
+                     )}
+                     <button
+                       onClick={() => setOffersOpen((prev) => !prev)}
+                       className="text-xs uppercase tracking-wider py-2 px-4 rounded-lg border cursor-pointer font-bold"
+                       style={{ background: '#222', color: '#fff' }}
+                     >
+                       {offersOpen ? 'Hide Offers' : 'View Offers'}
+                     </button>
+                   </>
+                ) : !booking.fromResale ? (
                   <button
                     onClick={() => onResell(booking)}
                     className="text-xs uppercase tracking-wider py-2 px-4 rounded-lg border cursor-pointer font-bold flex items-center gap-1.5 transition-all hover:bg-white/5"
@@ -305,6 +335,10 @@ function BookingCard({ booking, isDark, onCancel, onQR, onResell }) {
                   >
                     <Tag className="w-3.5 h-3.5" /> Resell
                   </button>
+                ) : (
+                  <span className="text-[10px] uppercase tracking-wider px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', color: '#EF4444' }}>
+                    Resale not allowed
+                  </span>
                 )}
                 <button
                   onClick={() => onCancel(booking.id)}
@@ -317,7 +351,7 @@ function BookingCard({ booking, isDark, onCancel, onQR, onResell }) {
             )}
               </>
             )}
-            {booking.status === 'completed' && (
+            {booking.status === 'completed' && !hasSoldTransfer && (
               <button
                 onClick={() => onQR(booking)}
                 className="text-xs uppercase tracking-wider py-2 px-4 rounded-lg border-none cursor-pointer font-bold flex items-center gap-1.5"
@@ -326,10 +360,77 @@ function BookingCard({ booking, isDark, onCancel, onQR, onResell }) {
                 <Ticket className="w-3.5 h-3.5" /> e-Ticket
               </button>
             )}
+            {booking.status === 'completed' && hasSoldTransfer && (
+              <span className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(74,222,128,0.12)', color: '#4ADE80' }}>
+                ✓ Ticket Sold
+              </span>
+            )}
             {booking.status === 'failed' && (
-              <span className="text-xs italic" style={{ color: isDark ? '#555' : '#bbb' }}>Refund processed</span>
+              <span className="text-xs italic" style={{ color: isDark ? '#555' : '#bbb' }}>
+                Refund processed
+              </span>
             )}
           </div>
+
+          {resaleListing && isListingSold && offersOpen && (
+            <div className="border-t pt-3 mt-3" style={{ borderColor: isDark ? '#1a1a1a' : '#eee' }}>
+              <span className="text-xs font-bold uppercase tracking-wider px-3 py-2 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: '#22C55E' }}>
+                ✓ Sold to buyer
+              </span>
+            </div>
+          )}
+          {resaleListing && offersOpen && !isListingSold && (
+            <div className="border-t pt-3 mt-3" style={{ borderColor: isDark ? '#1a1a1a' : '#eee' }}>
+              <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#7DA8CF' }}>
+                Offers for resale listing
+              </p>
+              {activeOffers && activeOffers.length > 0 ? (
+                activeOffers.map((offer) => (
+                  <div key={offer.offerId} className="rounded-lg p-3 mb-2" style={{ background: isDark ? '#111' : '#f9f9f9' }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: isDark ? '#fff' : '#111' }}>
+                          Buyer: {offer.buyerId}
+                        </p>
+                        <p className="text-xs" style={{ color: isDark ? '#aaa' : '#777' }}>
+                          Offer: ₹{offer.offerPrice.toLocaleString()} • {offer.status}
+                        </p>
+                      </div>
+                      {offer.status === 'pending' && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => onOfferAction(offer.offerId, 'accept')}
+                            disabled={offerActionLoading === offer.offerId}
+                            className="text-xs py-1 px-3 rounded-lg font-bold"
+                            style={{ background: '#4ADE80', color: '#000' }}
+                          >
+                            {offerActionLoading === offer.offerId ? '...' : 'Accept'}
+                          </button>
+                          <button
+                            onClick={() => onOfferAction(offer.offerId, 'reject')}
+                            disabled={offerActionLoading === offer.offerId}
+                            className="text-xs py-1 px-3 rounded-lg font-bold"
+                            style={{ background: '#EF4444', color: '#fff' }}
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                      {offer.status !== 'pending' && (
+                        <span className="text-[10px] font-bold uppercase" style={{ color: isDark ? '#aaa' : '#777' }}>
+                          {offer.status}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs" style={{ color: isDark ? '#aaa' : '#777' }}>
+                  No offers yet for this listing.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
@@ -344,12 +445,48 @@ export default function MyBookings() {
   const [qrModal, setQrModal] = useState(null);
   const [resellModal, setResellModal] = useState(null);
   const navigate = useNavigate();
+  const [sellerListings, setSellerListings] = useState([]);
+  const [sellerOffers, setSellerOffers] = useState([]);
+  const [offersLoading, setOffersLoading] = useState(true);
+  const [offerActionLoading, setOfferActionLoading] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [refreshFn, setRefreshFn] = useState(null);
   const { mode } = useTheme();
   const { user, logout } = useStore();
   const isDark = mode === 'dark';
 
   // Fetch real bookings from the backend on mount
   useEffect(() => {
+    const fetchSellerData = async () => {
+      if (!user?.token) return;
+
+      const headers = { Authorization: `Bearer ${user.token}` };
+      setOffersLoading(true);
+
+      try {
+        const [listRes, offerRes] = await Promise.all([
+          fetch(`${API_BASE}/api/resale/my`, { headers }),
+          fetch(`${API_BASE}/api/offers?role=seller`, { headers }),
+        ]);
+
+        if (!listRes.ok) throw new Error('Failed to fetch seller resale listings');
+        if (!offerRes.ok) throw new Error('Failed to fetch seller offers');
+
+        const listData = await listRes.json();
+        const offerData = await offerRes.json();
+
+        console.log('[MyBookings] Seller listings:', listData.listings);
+        console.log('[MyBookings] Seller offers:', offerData.offers);
+
+        setSellerListings(listData.listings || []);
+        setSellerOffers(offerData.offers || []);
+      } catch (err) {
+        console.warn('[MyBookings] fetch seller data error:', err.message);
+      } finally {
+        setOffersLoading(false);
+      }
+    };
+
     const fetchBookings = async () => {
       if (!user?.token) {
         setBookings([]);
@@ -392,8 +529,10 @@ export default function MyBookings() {
           tier:       b.seatDetails?.[0]?.category || 'General',
           total:      b.totalAmount || 0,
           isReselling: b.isReselling || false,
+          fromResale:  b.fromResale || false,
+          resoldTo:   b.resoldTo || null,
           // Map backend status → UI status keys
-          status:     b.status === 'confirmed' ? 'upcoming' : b.status === 'cancelled' ? 'failed' : 'completed',
+          status:     b.status === 'confirmed' ? 'upcoming' : b.status === 'cancelled' ? 'failed' : b.status === 'resold' ? 'completed' : 'completed',
           image:      b.event?.images?.[0] || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=300&fit=crop',
         }));
         setBookings(normalised);
@@ -407,19 +546,79 @@ export default function MyBookings() {
     };
 
     fetchBookings();
-    setRefreshFn(() => fetchBookings);
+    fetchSellerData();
+    setRefreshFn(() => {
+      fetchBookings();
+      fetchSellerData();
+    });
   }, [user]);
-
-  const [refreshFn, setRefreshFn] = useState(null);
 
   const filtered = tab === 'all' ? bookings : bookings.filter((b) => b.status === tab);
 
 
-  const handleCancel = (id) => {
-    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'failed' } : b)));
-    setCancelModal(null);
-    toast.success('Booking cancelled. Refund will be processed.');
+  const handleCancel = async (id) => {
+    if (!user?.token) { toast.error('Please login to cancel'); return; }
+    try {
+      setCancelling(true);
+      const res = await fetch(`${API_BASE}/api/bookings/${id}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to cancel booking');
+      setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'failed' } : b)));
+      setCancelModal(null);
+      toast.success('Booking cancelled. Refund will be processed.');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setCancelling(false);
+    }
   };
+
+  const handleOfferAction = async (offerId, action) => {
+    if (!user?.token) {
+      toast.error('Please login to manage offers');
+      return;
+    }
+
+    setOfferActionLoading(offerId);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/offers/${offerId}/respond`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Offer update failed');
+
+      toast.success(`Offer ${action}ed successfully`);
+      // refresh data after action
+      if (typeof refreshFn === 'function') refreshFn();
+    } catch (err) {
+      console.warn('[MyBookings] offer action failed:', err);
+      toast.error(err.message || 'Failed to update the offer');
+    } finally {
+      setOfferActionLoading(null);
+    }
+  };
+
+  const listingByTicketId = Object.fromEntries(sellerListings.map((l) => [l.ticketId, l]));
+  const offersByListingId = sellerOffers.reduce((acc, offer) => {
+    if (!acc[offer.listingId]) acc[offer.listingId] = [];
+    acc[offer.listingId].push(offer);
+    return acc;
+  }, {});
+
+  console.log('[MyBookings] listingByTicketId:', listingByTicketId);
+  console.log('[MyBookings] offersByListingId:', offersByListingId);
+  console.log('[MyBookings] Bookings:', bookings);
+  console.log('[MyBookings] Total offers to display:', sellerOffers.length, 'across', Object.keys(offersByListingId).length, 'listings');
 
   const tabCounts = {
     all: bookings.length,
@@ -432,10 +631,21 @@ export default function MyBookings() {
     <div className="max-w-5xl mx-auto px-6 py-16">
       <div className="mb-10">
         <p className="text-xs uppercase tracking-widest font-bold mb-2" style={{ color: '#7DA8CF' }}>Account</p>
-        <h2 className="text-4xl md:text-5xl font-bold font-heading" style={{ color: isDark ? '#fff' : '#111', letterSpacing: '-0.02em' }}>
-          My Bookings
-        </h2>
-        <p className="text-sm mt-2" style={{ color: isDark ? '#666' : '#999' }}>Manage your tickets and reservations</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-4xl md:text-5xl font-bold font-heading" style={{ color: isDark ? '#fff' : '#111', letterSpacing: '-0.02em' }}>
+              My Bookings
+            </h2>
+            <p className="text-sm mt-2" style={{ color: isDark ? '#666' : '#999' }}>Manage your tickets and reservations</p>
+          </div>
+          <button
+            onClick={() => refreshFn?.()}
+            className="text-xs uppercase tracking-wider py-2 px-4 rounded-lg border cursor-pointer font-bold"
+            style={{ background: '#7DA8CF', color: '#000' }}
+          >
+            🔄 Refresh
+          </button>
+        </div>
       </div>
 
       {/* Loading state while fetching from backend */}
@@ -483,16 +693,29 @@ export default function MyBookings() {
 
       <div className="space-y-4">
         <AnimatePresence>
-          {filtered.map((booking) => (
-            <BookingCard
-              key={booking.id}
-              booking={booking}
-              isDark={isDark}
-              onCancel={setCancelModal}
-              onQR={setQrModal}
-              onResell={setResellModal}
-            />
-          ))}
+          {filtered.map((booking) => {
+            const resaleListing = listingByTicketId[booking.id];
+            const resaleOffersForListing = resaleListing ? offersByListingId[resaleListing.listingId] || [] : [];
+            
+            if (resaleListing) {
+              console.log(`[BookingCard] booking.id=${booking.id}, listing.ticketId=${resaleListing.ticketId}, listing.listingId=${resaleListing.listingId}, offers count=${resaleOffersForListing.length}`);
+            }
+
+            return (
+              <BookingCard
+                key={booking.id}
+                booking={booking}
+                isDark={isDark}
+                onCancel={setCancelModal}
+                onQR={setQrModal}
+                onResell={setResellModal}
+                resaleListing={resaleListing}
+                resaleOffers={resaleOffersForListing}
+                onOfferAction={handleOfferAction}
+                offerActionLoading={offerActionLoading}
+              />
+            );
+          })}
         </AnimatePresence>
 
         {filtered.length === 0 && (
@@ -555,8 +778,8 @@ export default function MyBookings() {
                 <button onClick={() => setCancelModal(null)} className="flex-1 py-2.5 rounded-lg text-sm font-bold uppercase tracking-wider cursor-pointer border" style={{ background: 'transparent', borderColor: isDark ? '#333' : '#ddd', color: isDark ? '#ccc' : '#444' }}>
                   Keep
                 </button>
-                <button onClick={() => handleCancel(cancelModal)} className="flex-1 py-2.5 rounded-lg text-sm font-bold uppercase tracking-wider border-none cursor-pointer" style={{ background: '#EF4444', color: '#fff' }}>
-                  Confirm Cancel
+                <button onClick={() => handleCancel(cancelModal)} disabled={cancelling} className="flex-1 py-2.5 rounded-lg text-sm font-bold uppercase tracking-wider border-none cursor-pointer disabled:opacity-60" style={{ background: '#EF4444', color: '#fff' }}>
+                  {cancelling ? 'Cancelling...' : 'Confirm Cancel'}
                 </button>
               </div>
             </motion.div>

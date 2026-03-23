@@ -33,6 +33,14 @@ const createListing = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Only confirmed bookings can be listed for resale' });
   }
 
+  // Prevent re-resale: tickets purchased from resale cannot be listed again
+  if (booking.fromResale) {
+    return res.status(400).json({
+      success: false,
+      message: 'This ticket was purchased from resale and cannot be listed again',
+    });
+  }
+
   // Calculate price-per-seat original price
   const originalPricePerSeat = booking.totalAmount / booking.seats.length;
   const maxAllowedPrice = originalPricePerSeat * 2;
@@ -92,9 +100,27 @@ const getListings = asyncHandler(async (req, res) => {
     listings = listings.filter(item => item.eventId === eventId);
   }
 
-  // Sort by newest listings first client-side to match previous behavior.
   listings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+  res.status(200).json({ success: true, count: listings.length, listings });
+});
+
+/**
+ * GET /api/resale/my
+ * Returns all resale listings created by the current user (seller view)
+ */
+const getMyListings = asyncHandler(async (req, res) => {
+  const { uid } = req.user;
+
+  const snap = await db
+    .collection('resaleListings')
+    .where('sellerId', '==', uid)
+    .get();
+
+  const listings = snap.docs
+    .map(d => d.data())
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  
   res.status(200).json({ success: true, count: listings.length, listings });
 });
 
@@ -123,9 +149,9 @@ const buyListing = asyncHandler(async (req, res) => {
     // Mark listing as sold
     t.update(listingRef, { status: 'sold', buyerId: uid, soldAt: new Date().toISOString() });
 
-    // Mark original booking as cancelled
+    // Mark original booking as resold (not cancelled — seller successfully sold it)
     t.update(db.collection('bookings').doc(listing.ticketId), {
-      status: 'cancelled', cancelledAt: new Date().toISOString(), resoldTo: uid,
+      status: 'resold', resoldAt: new Date().toISOString(), resoldTo: uid,
     });
 
     // Create new booking for buyer
@@ -152,4 +178,4 @@ const buyListing = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: 'Listing purchased successfully', bookingId: newBookingId });
 });
 
-module.exports = { createListing, getListings, buyListing };
+module.exports = { createListing, getListings, getMyListings, buyListing };

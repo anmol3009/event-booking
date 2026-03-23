@@ -15,6 +15,8 @@ export default function Checkout() {
   const { event, seats, tier, total, holdExpiry } = location.state || {};
   const [timeLeft, setTimeLeft] = useState(300);
   const [processing, setProcessing] = useState(false);
+  const [form, setForm] = useState({ name: '', card: '', expiry: '', cvv: '', email: '' });
+  const [errors, setErrors] = useState({});
   const { mode } = useTheme();
   const isDark = mode === 'dark';
 
@@ -32,7 +34,32 @@ export default function Checkout() {
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
+  const setField = (key, value) => {
+    setForm(f => ({ ...f, [key]: value }));
+    setErrors(e => ({ ...e, [key]: '' }));
+  };
+
+  const validate = () => {
+    const e = {};
+    if (!form.name.trim()) e.name = 'Name is required';
+    const cardDigits = form.card.replace(/\s/g, '');
+    if (!/^\d{16}$/.test(cardDigits)) e.card = 'Enter a valid 16-digit card number';
+    if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(form.expiry)) e.expiry = 'Use MM/YY format';
+    if (!/^\d{3,4}$/.test(form.cvv)) e.cvv = 'Enter a valid CVV';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const isFormValid =
+    form.name.trim() &&
+    /^\d{16}$/.test(form.card.replace(/\s/g, '')) &&
+    /^(0[1-9]|1[0-2])\/\d{2}$/.test(form.expiry) &&
+    /^\d{3,4}$/.test(form.cvv) &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
+
   const handleConfirm = async () => {
+    if (!validate()) return;
     if (!user?.token) return toast.error('Authentication expired. Please login again.');
     
     try {
@@ -116,25 +143,59 @@ export default function Checkout() {
           <div className="space-y-4">
             <div>
               <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Cardholder Name</label>
-              <input type="text" placeholder="John Doe" className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none" style={inputStyle} />
+              <input
+                type="text" placeholder="John Doe" value={form.name}
+                onChange={e => setField('name', e.target.value)}
+                className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none"
+                style={{ ...inputStyle, borderColor: errors.name ? '#EF4444' : inputStyle.borderColor }}
+              />
+              {errors.name && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.name}</p>}
             </div>
             <div>
               <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Card Number</label>
-              <input type="text" placeholder="4242 4242 4242 4242" className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none" style={inputStyle} />
+              <input
+                type="text" placeholder="4242 4242 4242 4242" value={form.card} maxLength={19}
+                onChange={e => setField('card', e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').slice(0, 19))}
+                className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none font-mono"
+                style={{ ...inputStyle, borderColor: errors.card ? '#EF4444' : inputStyle.borderColor }}
+              />
+              {errors.card && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.card}</p>}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Expiry</label>
-                <input type="text" placeholder="MM/YY" className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none" style={inputStyle} />
+                <input
+                  type="text" placeholder="MM/YY" value={form.expiry} maxLength={5}
+                  onChange={e => {
+                    let v = e.target.value.replace(/\D/g, '');
+                    if (v.length >= 3) v = v.slice(0, 2) + '/' + v.slice(2, 4);
+                    setField('expiry', v);
+                  }}
+                  className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none font-mono"
+                  style={{ ...inputStyle, borderColor: errors.expiry ? '#EF4444' : inputStyle.borderColor }}
+                />
+                {errors.expiry && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.expiry}</p>}
               </div>
               <div>
                 <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>CVV</label>
-                <input type="text" placeholder="123" className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none" style={inputStyle} />
+                <input
+                  type="text" placeholder="123" value={form.cvv} maxLength={4}
+                  onChange={e => setField('cvv', e.target.value.replace(/\D/g, ''))}
+                  className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none font-mono"
+                  style={{ ...inputStyle, borderColor: errors.cvv ? '#EF4444' : inputStyle.borderColor }}
+                />
+                {errors.cvv && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.cvv}</p>}
               </div>
             </div>
             <div>
               <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Email</label>
-              <input type="email" placeholder="you@email.com" className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none" style={inputStyle} />
+              <input
+                type="email" placeholder="you@email.com" value={form.email}
+                onChange={e => setField('email', e.target.value)}
+                className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none"
+                style={{ ...inputStyle, borderColor: errors.email ? '#EF4444' : inputStyle.borderColor }}
+              />
+              {errors.email && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.email}</p>}
             </div>
           </div>
         </div>
@@ -169,8 +230,8 @@ export default function Checkout() {
 
           <button
             onClick={handleConfirm}
-            disabled={processing || timeLeft === 0}
-            className="w-full mt-5 py-3.5 rounded font-bold text-sm uppercase tracking-wider border-none cursor-pointer flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            disabled={processing || timeLeft === 0 || !isFormValid}
+            className="w-full mt-5 py-3.5 rounded font-bold text-sm uppercase tracking-wider border-none cursor-pointer flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: '#7DA8CF', color: '#000' }}
           >
             {processing ? (

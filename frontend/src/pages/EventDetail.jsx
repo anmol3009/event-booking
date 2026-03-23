@@ -360,14 +360,13 @@ export default function EventDetail() {
 
   // Fetch event from backend
   useEffect(() => {
-    const load = async () => {
+    const load = async (isInitial = false) => {
       try {
-        setLoadingEvent(true);
+        if (isInitial) setLoadingEvent(true);
         const res = await fetch(`${API_BASE}/api/events/${id}`);
         if (!res.ok) throw new Error('Not found');
         const data = await res.json();
         const e = data.event;
-        // Normalise backend shape → UI shape
         const normalised = {
           id:         e.eventId,
           title:      e.title,
@@ -384,17 +383,22 @@ export default function EventDetail() {
             { name: 'General', price: e.generalPrice || 500 }
           ],
         };
-        setEvent(normalised);
-        // Initialize with real seats from backend (returned as data.seats)
+        if (isInitial) setEvent(normalised);
+        // Refresh seat states every poll — reflects cancellations/new bookings
         initializeSeats(normalised.totalSeats, data.seats || []);
       } catch (err) {
-        setEvent(null);
-        toast.error('Failed to load event details');
+        if (isInitial) {
+          setEvent(null);
+          toast.error('Failed to load event details');
+        }
       } finally {
-        setLoadingEvent(false);
+        if (isInitial) setLoadingEvent(false);
       }
     };
-    load();
+    load(true);
+    // Poll every 30 seconds so seat layout stays current (cancellations, new bookings)
+    const poll = setInterval(() => load(false), 30000);
+    return () => clearInterval(poll);
   }, [id, initializeSeats]);
 
   const venueLayout = useMemo(() => {

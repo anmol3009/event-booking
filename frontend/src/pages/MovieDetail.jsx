@@ -1,7 +1,8 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useMemo, useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, MapPin, Clock, ArrowLeft, Star, ZoomIn, ZoomOut, Monitor } from 'lucide-react';
+import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import useTheme from '../store/useTheme';
 
@@ -213,11 +214,13 @@ export default function MovieDetail() {
   const navigate = useNavigate();
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { seatStates, initializeSeats, selectedSeats, selectSeat, selectedTier, setSelectedTier, clearSeats } = useStore();
+  const { seatStates, initializeSeats, selectedSeats, selectSeat, selectedTier, setSelectedTier, clearSeats, user } = useStore();
+  const [processing, setProcessing] = useState(false);
   const { mode } = useTheme();
   const isDark = mode === 'dark';
   const [zoom, setZoom] = useState(1);
   const [showtime, setShowtime] = useState('7:30 PM');
+  const location = useLocation();
 
   useEffect(() => {
     const fetchMovie = async () => {
@@ -235,14 +238,28 @@ export default function MovieDetail() {
             rating: m.rating || 0,
             duration: m.duration || '2h 0m',
             certification: m.certification || 'UA',
-            releaseDate: m.date
+            releaseDate: m.date,
+            tiers: m.tiers || [{ name: 'General', price: 200 }, { name: 'VIP', price: 500 }, { name: 'Premium', price: 800 }],
           };
           setMovie(mappedMovie);
           clearSeats();
-          initializeSeats(m.totalSeats);
+          initializeSeats(m.totalSeats, data.seats || []);
+        } else {
+          // Fallback: use movie data passed via navigation state (for demo movies)
+          const demoMovie = location.state?.movie;
+          if (demoMovie) {
+            setMovie(demoMovie);
+            clearSeats();
+            initializeSeats(demoMovie.totalSeats || 200, []);
+          }
         }
       } catch (err) {
-        console.error(err);
+        const demoMovie = location.state?.movie;
+        if (demoMovie) {
+          setMovie(demoMovie);
+          clearSeats();
+          initializeSeats(demoMovie.totalSeats || 200, []);
+        }
       } finally {
         setLoading(false);
       }
@@ -258,17 +275,43 @@ export default function MovieDetail() {
   const activeTier = selectedTier ? movie?.tiers.find((t) => t.name === selectedTier) : movie?.tiers[0];
   const totalPrice = (activeTier?.price || 0) * selectedSeats.length;
 
-  const handleProceed = useCallback(() => {
+  const handleProceed = useCallback(async () => {
     if (selectedSeats.length === 0) return;
-    navigate('/checkout', {
-      state: {
-        event: { ...movie, date: movie.releaseDate, location: 'PVR Cinemas' },
-        seats: selectedSeats,
-        tier: selectedTier || movie.tiers[0].name,
-        total: totalPrice || movie.tiers[0].price * selectedSeats.length,
-      },
-    });
-  }, [selectedSeats, selectedTier, totalPrice, movie, navigate]);
+    if (!user?.token) {
+      toast.error('Please sign in to book tickets');
+      navigate('/auth/login');
+      return;
+    }
+    try {
+      setProcessing(true);
+      const res = await fetch(`${API_BASE}/api/bookings/hold`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          eventId: movie.id,
+          seatIds: selectedSeats.map(s => s.toString()),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to hold seats');
+      navigate('/checkout', {
+        state: {
+          event: { ...movie, date: movie.releaseDate, location: movie.venue || 'PVR Cinemas' },
+          seats: selectedSeats,
+          tier: selectedTier || movie.tiers[0].name,
+          total: totalPrice || movie.tiers[0].price * selectedSeats.length,
+          holdExpiry: data.holdExpiry,
+        },
+      });
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setProcessing(false);
+    }
+  }, [selectedSeats, selectedTier, totalPrice, movie, user, navigate]);
 
   if (loading) {
     return (
@@ -508,15 +551,15 @@ export default function MovieDetail() {
                 )}
                 <button
                   onClick={handleProceed}
-                  disabled={selectedSeats.length === 0}
+                  disabled={selectedSeats.length === 0 || processing}
                   className="py-3 px-8 rounded font-bold text-sm uppercase tracking-wider transition-all duration-300 border-none cursor-pointer"
                   style={{
                     background: selectedSeats.length > 0 ? '#7DA8CF' : (isDark ? '#1a1a1a' : '#e5e5e5'),
                     color: selectedSeats.length > 0 ? '#000' : (isDark ? '#555' : '#aaa'),
-                    cursor: selectedSeats.length > 0 ? 'pointer' : 'not-allowed',
+                    cursor: selectedSeats.length > 0 && !processing ? 'pointer' : 'not-allowed',
                   }}
                 >
-                  Proceed
+                  {processing ? 'Holding...' : 'Proceed'}
                 </button>
               </div>
             </div>
