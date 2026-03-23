@@ -102,7 +102,7 @@ const createEvent = asyncHandler(async (req, res) => {
  */
 const getEvents = asyncHandler(async (req, res) => {
   const { date, startDate, endDate } = req.query;
-  let query = db.collection('events').orderBy('date', 'asc');
+  let query = db.collection('events');
 
   if (date) {
     // Exact date match (events on this day)
@@ -112,7 +112,9 @@ const getEvents = asyncHandler(async (req, res) => {
   }
 
   const snap = await query.get();
-  const events = snap.docs.map(d => d.data());
+  const events = snap.docs
+    .map(d => d.data())
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
   res.status(200).json({ success: true, count: events.length, events });
 });

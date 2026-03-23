@@ -100,7 +100,11 @@ const getAllEventsAdmin = asyncHandler(async (req, res) => {
     .where('createdBy', '==', uid)
     .get();
 
-  const events = await Promise.all(eventsSnap.docs.map(async (doc) => {
+  const eventDocs = eventsSnap.docs.sort((a, b) => 
+    (a.data().date || '').localeCompare(b.data().date || '')
+  );
+
+  const events = await Promise.all(eventDocs.map(async (doc) => {
     const event = doc.data();
 
     const bookingsSnap = await db
