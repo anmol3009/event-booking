@@ -17,13 +17,24 @@ const errorHandler    = require('./middleware/errorHandler');
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:5173',
-];
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+].filter(Boolean);
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, Postman)
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list or is a vercel subdomain
+    const isAllowed = allowedOrigins.includes(origin) || 
+                     origin.endsWith('.vercel.app');
+                     
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
   },
   credentials: true,
 }));
