@@ -16,31 +16,54 @@ const STEPS = [
 ];
 
 function SeatLayoutPreview({ count, isDark }) {
-  const cols = Math.min(14, Math.ceil(Math.sqrt(count)));
+  const cols = Math.min(16, Math.ceil(Math.sqrt(count)));
   if (count <= 0) return null;
 
   return (
-    <div className="rounded-lg p-4 border" style={{ background: isDark ? '#0a0a0a' : '#f5f5f5', borderColor: isDark ? '#1a1a1a' : '#eee' }}>
-      <p className="text-xs mb-3" style={{ color: isDark ? '#555' : '#999' }}>
-        Preview: {count} seats ({Math.ceil(count / cols)} rows × {cols} cols)
-      </p>
+    <div className="rounded-lg p-5 border backdrop-blur-sm transition-all" style={{ 
+      background: isDark ? 'linear-gradient(135deg, #0a0a0a 0%, #111 100%)' : 'linear-gradient(135deg, #f5f5f5 0%, #fafafa 100%)',
+      borderColor: isDark ? '#1a1a1a' : '#eee',
+      boxShadow: `0 4px 15px ${isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)'}`
+    }}>
+      <div className="mb-4">
+        <p className="text-sm font-bold mb-2" style={{ color: isDark ? '#fff' : '#111' }}>Preview</p>
+        <p className="text-xs" style={{ color: isDark ? '#666' : '#999' }}>
+          {count} seats — {Math.ceil(count / cols)} rows × {cols} cols
+        </p>
+      </div>
       <div
-        className="grid gap-1 justify-center mx-auto"
-        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, maxWidth: `${cols * 22}px` }}
+        className="grid gap-1.5 justify-center mx-auto"
+        style={{ 
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, 
+          maxWidth: `${cols * 26}px`
+        }}
       >
         {Array.from({ length: Math.min(count, 300) }, (_, i) => (
           <motion.div
             key={i}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: i * 0.002 }}
-            className="w-4 h-4 rounded-full"
-            style={{ background: '#4ADE80' }}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ 
+              delay: i * 0.003,
+              duration: 0.3,
+              type: 'spring',
+              stiffness: 200
+            }}
+            whileHover={{ scale: 1.3, zIndex: 10, y: -2 }}
+            className="rounded-sm"
+            style={{ 
+              width: 18,
+              height: 18,
+              background: 'linear-gradient(135deg, #2DD4BF 0%, #13B0A7 100%)',
+              boxShadow: '0 2px 8px rgba(45, 212, 191, 0.3), 0 0 12px rgba(45, 212, 191, 0.2)',
+              cursor: 'pointer',
+              borderRadius: 3
+            }}
           />
         ))}
       </div>
       {count > 300 && (
-        <p className="text-xs mt-2 text-center" style={{ color: isDark ? '#444' : '#bbb' }}>
+        <p className="text-xs mt-4 text-center" style={{ color: isDark ? '#555' : '#bbb' }}>
           Showing first 300 of {count} seats
         </p>
       )}

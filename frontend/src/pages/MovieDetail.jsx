@@ -80,30 +80,35 @@ function generateTheatreLayout(totalSeats, tiers) {
   return sections;
 }
 
-function Seat({ index, status, isSelected, onSelect, isDark, label, tierColor, dimmed }) {
+function Seat({ index, status, isSelected, onSelect, isDark, label, tierColor }) {
   const getColor = () => {
-    if (isSelected) return '#FFFFFF';
-    if (status === 'booked') return isDark ? '#222' : '#ddd';
-    if (status === 'held') return isDark ? '#1a1a1a' : '#e5e5e5';
-    return tierColor;
+    if (isSelected) return tierColor;
+    if (status === 'booked') return isDark ? '#333' : '#d0d0d0';
+    if (status === 'held') return isDark ? '#222' : '#e8e8e8';
+    return 'transparent';
   };
 
   const canSelect = status === 'available';
 
   return (
     <motion.button
-      whileHover={canSelect && !dimmed ? { scale: 1.5, zIndex: 10 } : {}}
-      whileTap={canSelect && !dimmed ? { scale: 0.85 } : {}}
-      onClick={() => !dimmed && (canSelect || isSelected) && onSelect(index)}
-      className="rounded-sm border-none transition-all duration-200 relative"
+      whileHover={canSelect ? { scale: 1.6, zIndex: 20, y: -3 } : {}}
+      whileTap={canSelect ? { scale: 0.9 } : {}}
+      onClick={() => (canSelect || isSelected) && onSelect(index)}
+      className="relative border-none transition-all duration-200 rounded-md focus:outline-none"
       style={{
-        width: 22,
-        height: 22,
+        width: 24,
+        height: 24,
         background: getColor(),
-        opacity: dimmed ? 0.12 : status === 'booked' ? 0.4 : status === 'held' ? 0.2 : 1,
-        cursor: dimmed ? 'default' : canSelect || isSelected ? 'pointer' : 'not-allowed',
-        boxShadow: isSelected ? '0 0 10px #fff, 0 0 3px #fff' : 'none',
+        opacity: status === 'booked' ? 0.45 : status === 'held' ? 0.25 : 1,
+        cursor: canSelect || isSelected ? 'pointer' : 'not-allowed',
+        boxShadow: isSelected 
+          ? `0 0 20px ${tierColor}cc, 0 0 12px ${tierColor}, 0 4px 12px rgba(0,0,0,0.4), inset 0 0 8px rgba(255,255,255,0.3)` 
+          : canSelect
+          ? `0 0 6px ${tierColor}66`
+          : 'none',
         borderRadius: 4,
+        border: isSelected ? `2.5px solid #fff` : canSelect ? `1.5px solid ${tierColor}` : 'none',
       }}
       title={`${label} — ${status === 'booked' ? 'Booked' : status === 'held' ? 'Held' : 'Available'}`}
     />
@@ -112,29 +117,53 @@ function Seat({ index, status, isSelected, onSelect, isDark, label, tierColor, d
 
 function TheatreSection({ section, seatStates, selectedSeats, selectSeat, isDark, highlightTier }) {
   return (
-    <div className="mb-6">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="h-px flex-1" style={{ background: isDark ? '#1a1a1a' : '#e5e5e5' }} />
-        <span className="text-[9px] uppercase tracking-[0.25em] font-bold px-3 py-1 rounded-full" style={{ color: isDark ? '#555' : '#aaa', background: isDark ? '#0a0a0a' : '#f0f0f0' }}>
+    <motion.div 
+      className="mb-8 rounded-lg p-6 backdrop-blur-sm transition-all duration-200"
+      style={{ 
+        background: isDark ? 'linear-gradient(135deg, #111 0%, #0a0a0a 100%)' : 'linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%)',
+        border: `1px solid ${isDark ? '#1a1a1a' : '#eee'}`,
+        boxShadow: `0 4px 20px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.05)'}`
+      }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+    >
+      <div className="flex items-center gap-4 mb-6">
+        <div className="h-px flex-1" style={{ background: isDark ? '#1a1a1a' : '#ddd' }} />
+        <motion.span 
+          className="text-[11px] uppercase tracking-[0.3em] font-bold px-4 py-2 rounded-full whitespace-nowrap"
+          style={{ 
+            color: '#7DA8CF', 
+            background: isDark ? '#0a0a0a' : '#f0f0f0',
+            border: `1px solid ${isDark ? '#1a1a1a' : '#ddd'}`
+          }}
+          whileHover={{ scale: 1.05 }}
+        >
           {section.name}
-        </span>
-        <div className="h-px flex-1" style={{ background: isDark ? '#1a1a1a' : '#e5e5e5' }} />
+        </motion.span>
+        <div className="h-px flex-1" style={{ background: isDark ? '#1a1a1a' : '#ddd' }} />
       </div>
 
-      <div className="space-y-[4px]">
+      <div className="space-y-2">
         {section.rows.map((row, rowIdx) => {
           const rowStart = section.startIndex + section.rows.slice(0, rowIdx).reduce((sum, r) => sum + r.seats, 0);
           const seatsArr = Array.from({ length: row.seats }, (_, i) => rowStart + i);
-          const isDimmed = highlightTier && highlightTier !== row.tier;
+          
+          // Hide rows that don't match selected tier (show-only filter)
+          const shouldHide = highlightTier && highlightTier !== row.tier;
+          if (shouldHide) return null;
 
           // Split into 2 blocks with center aisle (cinema style)
           const half = Math.ceil(row.seats / 2);
           const blockL = seatsArr.slice(0, half);
           const blockR = seatsArr.slice(half);
-
           return (
-            <div key={row.label} className="flex items-center justify-center">
-              <span className="w-5 text-[9px] font-mono text-right mr-2 shrink-0" style={{ color: isDark ? '#333' : '#ccc' }}>
+            <motion.div 
+              key={row.label} 
+              className="flex items-center justify-center transition-all duration-200"
+              whileHover={{ scale: 1.02 }}
+            >
+              <span className="w-6 text-[10px] font-bold text-right mr-3 shrink-0" style={{ color: row.color, letterSpacing: '0.05em' }}>
                 {row.label}
               </span>
 
@@ -149,11 +178,10 @@ function TheatreSection({ section, seatStates, selectedSeats, selectSeat, isDark
                     isDark={isDark}
                     label={`${row.label}${i + 1}`}
                     tierColor={row.color}
-                    dimmed={isDimmed}
                   />
                 ))}
               </div>
-              <div style={{ width: 20 }} />
+              <div style={{ width: 24 }} />
               <div className="flex gap-[4px]">
                 {blockR.map((seatIdx, i) => (
                   <Seat
@@ -165,19 +193,18 @@ function TheatreSection({ section, seatStates, selectedSeats, selectSeat, isDark
                     isDark={isDark}
                     label={`${row.label}${half + i + 1}`}
                     tierColor={row.color}
-                    dimmed={isDimmed}
                   />
                 ))}
               </div>
 
-              <span className="w-5 text-[9px] font-mono ml-2 shrink-0" style={{ color: isDark ? '#333' : '#ccc' }}>
+              <span className="w-6 text-[10px] font-bold ml-3 shrink-0" style={{ color: row.color, letterSpacing: '0.05em' }}>
                 {row.label}
               </span>
-            </div>
+            </motion.div>
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 }
 

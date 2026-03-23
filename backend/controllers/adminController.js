@@ -98,7 +98,6 @@ const getAllEventsAdmin = asyncHandler(async (req, res) => {
   const eventsSnap = await db
     .collection('events')
     .where('createdBy', '==', uid)
-    .orderBy('date', 'asc')
     .get();
 
   const events = await Promise.all(eventsSnap.docs.map(async (doc) => {
@@ -118,6 +117,9 @@ const getAllEventsAdmin = asyncHandler(async (req, res) => {
       revenue,
     };
   }));
+
+  // Sort by date ascending to preserve expected admin timeline order.
+  events.sort((a, b) => new Date(a.date) - new Date(b.date));
 
   res.status(200).json({ success: true, events });
 });

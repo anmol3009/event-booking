@@ -22,6 +22,11 @@ const holdSeats = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'eventId and seatIds[] are required' });
   }
 
+  // Enforce 4-seat maximum per booking
+  if (seatIds.length > 4) {
+    return res.status(400).json({ success: false, message: 'Maximum 4 seats allowed per booking' });
+  }
+
   const holdExpiry = new Date(Date.now() + HOLD_DURATION_MS).toISOString();
 
   // Use a Firestore transaction to atomically check + hold all seats
@@ -72,6 +77,11 @@ const confirmBooking = asyncHandler(async (req, res) => {
 
   if (!eventId || !Array.isArray(seatIds) || seatIds.length === 0) {
     return res.status(400).json({ success: false, message: 'eventId and seatIds[] are required' });
+  }
+
+  // Enforce 4-seat maximum per booking
+  if (seatIds.length > 4) {
+    return res.status(400).json({ success: false, message: 'Maximum 4 seats allowed per booking' });
   }
 
   let bookingId;
@@ -155,7 +165,6 @@ const getMyBookings = asyncHandler(async (req, res) => {
   const bookingsSnap = await db
     .collection('bookings')
     .where('userId', '==', uid)
-    .orderBy('createdAt', 'desc')
     .get();
 
   const bookings = await Promise.all(bookingsSnap.docs.map(async (doc) => {
@@ -178,6 +187,9 @@ const getMyBookings = asyncHandler(async (req, res) => {
 
     return { ...booking, event, seatDetails };
   }));
+
+  // Sort by newest bookings first (client expects descending createdAt)
+  bookings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   res.status(200).json({ success: true, bookings });
 });
