@@ -301,6 +301,16 @@ const getBookingById = asyncHandler(async (req, res) => {
   }
 
   const booking = bookingSnap.data();
+  const userId = booking.userId;
+
+  // Fetch current owner's name from users collection
+  let userName = 'Unknown Customer';
+  if (userId) {
+    const userSnap = await db.collection('users').doc(userId).get();
+    if (userSnap.exists) {
+      userName = userSnap.data().name || 'Unknown Customer';
+    }
+  }
 
   // Fetch event details
   const eventSnap = await db.collection('events').doc(booking.eventId).get();
@@ -319,7 +329,7 @@ const getBookingById = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    booking: { ...booking, event, seatDetails }
+    booking: { ...booking, event, seatDetails, userName }
   });
 });
 

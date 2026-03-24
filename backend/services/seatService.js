@@ -49,6 +49,8 @@ const generateSeats = async (eventId, vipPrice = 1500, generalPrice = 500, premi
       batch.set(seatRef, {
         seatId,
         label,
+        row,
+        number:      num,
         eventId,
         category,
         price,

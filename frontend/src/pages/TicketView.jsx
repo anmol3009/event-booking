@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Calendar, MapPin, Ticket, ShieldCheck, ArrowLeft, Download, Share2 } from 'lucide-react';
+import { Calendar, MapPin, Ticket, ShieldCheck, ArrowLeft, Download, Share2, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import useTheme from '../store/useTheme';
 import toast from 'react-hot-toast';
@@ -97,14 +97,30 @@ export default function TicketView() {
             </div>
             {/* Status Ribbon */}
             <div className="absolute top-4 right-4">
-              <span className="px-3 py-1 rounded-full bg-green-500 text-black text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-lg">
-                <ShieldCheck className="w-3 h-3" /> Verified
-              </span>
+              {booking.status === 'confirmed' ? (
+                <span className="px-3 py-1 rounded-full bg-green-500 text-black text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-lg">
+                  <ShieldCheck className="w-3 h-3" /> Verified
+                </span>
+              ) : booking.status === 'resold' ? (
+                <span className="px-3 py-1 rounded-full bg-yellow-500 text-black text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-lg">
+                  <Share2 className="w-3 h-3" /> Transferred
+                </span>
+              ) : (
+                <span className="px-3 py-1 rounded-full bg-red-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-lg">
+                  <X className="w-3 h-3" /> {booking.status?.toUpperCase()}
+                </span>
+              )}
             </div>
           </div>
 
           {/* Details Section */}
           <div className="p-6">
+            {booking.status === 'resold' && (
+              <div className="mb-6 p-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs font-bold text-center">
+                This ticket has been resold and is no longer valid for the original owner.
+              </div>
+            )}
+            
             <div className="grid grid-cols-2 gap-6 mb-8">
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-1">Date</p>
@@ -139,23 +155,29 @@ export default function TicketView() {
 
             {/* Seat Information */}
             <div className="grid grid-cols-3 gap-4 mb-8 text-center">
-              <div className="p-3 rounded-2xl bg-[#1a1a1a]">
+              <div className={`p-3 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-gray-100'}`}>
                 <p className="text-[8px] uppercase tracking-tighter text-gray-500 mb-1">Row</p>
-                <p className="text-lg font-black font-mono">B</p>
+                <p className={`text-lg font-black font-mono ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {booking.seatDetails?.[0]?.row || (booking.seats?.[0]?.match(/^[A-Z]+/)?.[0] || '?')}
+                </p>
               </div>
-              <div className="p-3 rounded-2xl bg-[#1a1a1a]">
+              <div className={`p-3 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-gray-100'}`}>
                 <p className="text-[8px] uppercase tracking-tighter text-gray-500 mb-1">Seat</p>
-                <p className="text-lg font-black font-mono">{booking.seats?.join(', ')}</p>
+                <p className={`text-lg font-black font-mono ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {booking.seats?.join(', ')}
+                </p>
               </div>
-              <div className="p-3 rounded-2xl bg-[#1a1a1a]">
+              <div className={`p-3 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-gray-100'}`}>
                 <p className="text-[8px] uppercase tracking-tighter text-gray-500 mb-1">Tier</p>
-                <p className="text-lg font-black font-mono">VIP</p>
+                <p className={`text-lg font-black font-mono uppercase ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {booking.seatDetails?.[0]?.category || 'GEN'}
+                </p>
               </div>
             </div>
 
             {/* QR Code */}
             <div className="flex flex-col items-center justify-center py-6">
-              <div className="p-6 rounded-[2rem] bg-white">
+              <div className="p-6 rounded-[2rem] bg-white shadow-xl">
                 <QRCodeSVG 
                   value={`${window.location.origin}/ticket/${bookingId}`} 
                   size={180}
@@ -167,15 +189,15 @@ export default function TicketView() {
           </div>
 
           {/* Bottom Footer Section */}
-          <div className="p-6 bg-[#1a1a1a] flex items-center justify-between">
+          <div className={`p-6 border-t ${isDark ? 'bg-white/5 border-white/5' : 'bg-gray-50 border-gray-100'} flex items-center justify-between`}>
              <div className="flex items-center gap-3">
                <div className="p-2 rounded-xl bg-[#7DA8CF]/10">
                  <Ticket className="w-5 h-5 text-[#7DA8CF]" />
                </div>
-               <div>
-                 <p className="text-[10px] text-gray-500 font-bold uppercase">Customer</p>
-                 <p className="text-xs font-bold">Anmol Santwani</p>
-               </div>
+                <div>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase">Customer</p>
+                  <p className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{booking.userName || 'Unknown'}</p>
+                </div>
              </div>
              <div className="text-right">
                 <p className="text-[10px] text-gray-500 font-bold uppercase">Price</p>
@@ -186,10 +208,14 @@ export default function TicketView() {
 
         {/* Action Buttons */}
         <div className="flex gap-4 mt-8">
-           <button className="flex-1 py-4 rounded-2xl bg-[#111] border border-gray-800 flex items-center justify-center gap-2 font-bold text-sm shadow-xl hover:bg-[#1a1a1a] transition-colors">
+           <button className={`flex-1 py-4 rounded-2xl border flex items-center justify-center gap-2 font-bold text-sm shadow-xl transition-all ${
+             isDark ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-gray-200 hover:bg-gray-50'
+           }`}>
              <Download className="w-4 h-4" /> Save PDF
            </button>
-           <button className="flex-1 py-4 rounded-2xl bg-[#111] border border-gray-800 flex items-center justify-center gap-2 font-bold text-sm shadow-xl hover:bg-[#1a1a1a] transition-colors">
+           <button className={`flex-1 py-4 rounded-2xl border flex items-center justify-center gap-2 font-bold text-sm shadow-xl transition-all ${
+             isDark ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-gray-200 hover:bg-gray-50'
+           }`}>
              <Share2 className="w-4 h-4" /> Share
            </button>
         </div>
