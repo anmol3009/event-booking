@@ -2,8 +2,9 @@ const { db } = require('../config/firebase');
 const asyncHandler = require('../utils/asyncHandler');
 const { assignFromWaitlist } = require('../services/waitlistService');
 const { sendBookingConfirmation } = require('../services/emailService');
+const { broadcastSeatUpdate } = require('../socket');
 
-const HOLD_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const HOLD_DURATION_MS = 2 * 60 * 1000; // 2 minutes
 
 // ─── Helper: get seat ref ────────────────────────────────────────────────────
 const seatRef = (eventId, seatId) =>
@@ -56,6 +57,11 @@ const holdSeats = asyncHandler(async (req, res) => {
     for (const snap of snaps) {
       t.update(snap.ref, { status: 'held', heldBy: uid, holdExpiry });
     }
+  });
+
+  // Broadcast after successful transaction
+  seatIds.forEach(id => {
+    broadcastSeatUpdate(eventId, { seatId: id, status: 'held', heldBy: uid, holdExpiry });
   });
 
   res.status(200).json({
@@ -166,6 +172,11 @@ const confirmBooking = asyncHandler(async (req, res) => {
     t.update(eventRef, { availableSeats: Math.max(0, currentAvailable - seatIds.length) });
   });
 
+  // Broadcast after successful transaction
+  seatIds.forEach(id => {
+    broadcastSeatUpdate(eventId, { seatId: id, status: 'booked', userId: uid });
+  });
+
   // Fetch event name for email (outside transaction — fire-and-forget)
   db.collection('events').doc(eventId).get().then(snap => {
     if (snap.exists) {
@@ -185,6 +196,38 @@ const confirmBooking = asyncHandler(async (req, res) => {
     bookingId, 
     newCoins: finalCoinBalance 
   });
+});
+
+/**
+ * POST /api/bookings/release
+ * Explicitly releases seats held by the user and broadcasts the update.
+ */
+const releaseSeats = asyncHandler(async (req, res) => {
+  const { uid } = req.user;
+  const { eventId, seatIds } = req.body;
+
+  if (!eventId || !Array.isArray(seatIds) || seatIds.length === 0) {
+    return res.status(400).json({ success: false, message: 'eventId and seatIds[] are required' });
+  }
+
+  // Use simple batch to clear statuses
+  const batch = db.batch();
+  for (const seatId of seatIds) {
+    batch.update(seatRef(eventId, seatId), { 
+      status: 'available', 
+      heldBy: null, 
+      holdExpiry: null 
+    });
+  }
+
+  await batch.commit();
+
+  // Broadcast to all users in room
+  seatIds.forEach(id => {
+    broadcastSeatUpdate(eventId, { seatId: id, status: 'available' });
+  });
+
+  res.status(200).json({ success: true, message: 'Seats released' });
 });
 
 /**
@@ -333,4 +376,4 @@ const getBookingById = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { holdSeats, confirmBooking, getMyBookings, cancelBooking, getBookingById };
+module.exports = { holdSeats, releaseSeats, confirmBooking, getMyBookings, cancelBooking, getBookingById };

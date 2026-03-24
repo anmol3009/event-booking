@@ -67,8 +67,14 @@ app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const http = require('http');
+const { initSocket } = require('./socket');
+
+const server = http.createServer(app);
+initSocket(server);
+
+server.listen(PORT, () => {
   console.log(`🚀 CookMyShow API running on port ${PORT}`);
 });
 
-module.exports = app;
+module.exports = server;

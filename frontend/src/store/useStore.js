@@ -1,8 +1,40 @@
 import { create } from 'zustand';
-import { signOut } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { io } from 'socket.io-client';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const socket = io(API_BASE, { autoConnect: false });
 
 const useStore = create((set, get) => ({
+  // Socket — access point for components
+  socket,
+
+  // Seat state update for live sync (can be called by sockets or HTTP)
+  setSeatStatus: (seatId, status, holdExpiry) => set((state) => {
+    const numericId = Number(seatId);
+    if (isNaN(numericId)) return {};
+
+    const newState = { ...state.seatStates, [numericId]: status };
+    
+    // If a hold is starting, schedule a client-side release as fallback
+    if (status === 'held') {
+      const remainingMs = holdExpiry ? (new Date(holdExpiry) - new Date()) : 120000;
+      if (remainingMs > 0) {
+        setTimeout(() => {
+          // Only release if it's STILL in 'held' state (hasn't been booked or updated)
+          const current = get().seatStates[numericId];
+          if (current === 'held') {
+            set((s) => ({
+              seatStates: { ...s.seatStates, [numericId]: 'available' },
+              selectedSeats: s.selectedSeats.filter(id => Number(id) !== numericId)
+            }));
+          }
+        }, remainingMs);
+      }
+    }
+    
+    return { seatStates: newState };
+  }),
+
   // Auth — user shape: { userId, name, email, token (Firebase ID token) }
   user: null,
   isLoggedIn: false,
@@ -20,15 +52,18 @@ const useStore = create((set, get) => ({
   selectedSeats: [],
   selectedTier: null,
   selectSeat: (seatIndex) => {
+    const num = Number(seatIndex);
+    if (isNaN(num)) return;
+
     const { selectedSeats } = get();
-    if (selectedSeats.includes(seatIndex)) {
-      set({ selectedSeats: selectedSeats.filter((s) => s !== seatIndex) });
+    if (selectedSeats.includes(num)) {
+      set({ selectedSeats: selectedSeats.filter((s) => s !== num) });
     } else {
       // Enforce 4-seat limit per user per booking
       if (selectedSeats.length >= 4) {
         return; // Silently ignore, or toast will handle it in component
       }
-      set({ selectedSeats: [...selectedSeats, seatIndex] });
+      set({ selectedSeats: [...selectedSeats, num] });
     }
   },
   clearSeats: () => set({ selectedSeats: [], selectedTier: null }),
@@ -45,7 +80,7 @@ const useStore = create((set, get) => ({
     // Then, overlay with real statuses if provided (seatData is array of { seatId (index), status, etc. })
     if (Array.isArray(seatData)) {
       seatData.forEach(s => {
-        const idx = typeof s.seatId === 'number' ? s.seatId : parseInt(s.seatId);
+        const idx = Number(s.seatId);
         if (!isNaN(idx)) states[idx] = s.status;
       });
     }

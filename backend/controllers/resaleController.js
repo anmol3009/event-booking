@@ -11,7 +11,7 @@ const asyncHandler = require('../utils/asyncHandler');
  */
 const createListing = asyncHandler(async (req, res) => {
   const { uid } = req.user;
-  const { bookingId, price } = req.body;
+  const { bookingId, price, seats: requestedSeats } = req.body;
 
   if (!bookingId || price == null) {
     return res.status(400).json({ success: false, message: 'bookingId and price are required' });
@@ -41,14 +41,25 @@ const createListing = asyncHandler(async (req, res) => {
     });
   }
 
-  // Calculate price-per-seat original price
+  // Determine which seats to list (partial resale support)
+  let seatsToList = booking.seats;
+  if (Array.isArray(requestedSeats) && requestedSeats.length > 0) {
+    const bookingSeatsSet = new Set(booking.seats.map(String));
+    const allValid = requestedSeats.every(s => bookingSeatsSet.has(String(s)));
+    if (!allValid || requestedSeats.length > booking.seats.length) {
+      return res.status(400).json({ success: false, message: 'Invalid seats — must be a subset of your booked seats' });
+    }
+    seatsToList = requestedSeats.map(String);
+  }
+
+  // Price cap: 2× per-seat × number of seats being listed
   const originalPricePerSeat = booking.totalAmount / booking.seats.length;
-  const maxAllowedPrice = originalPricePerSeat * 2;
+  const maxAllowedPrice = originalPricePerSeat * 2 * seatsToList.length;
 
   if (parseFloat(price) > maxAllowedPrice) {
     return res.status(400).json({
       success: false,
-      message: `Resale price cannot exceed 2× original price (₹${maxAllowedPrice.toFixed(2)} max)`,
+      message: `Resale price cannot exceed 2× original (₹${maxAllowedPrice.toFixed(0)} max for ${seatsToList.length} seat${seatsToList.length > 1 ? 's' : ''})`,
     });
   }
 
@@ -70,7 +81,7 @@ const createListing = asyncHandler(async (req, res) => {
     ticketId:      bookingId,
     sellerId:      uid,
     eventId:       booking.eventId,
-    seats:         booking.seats,
+    seats:         seatsToList,
     price:         parseFloat(price),
     originalPrice: booking.totalAmount,
     status:        'active',

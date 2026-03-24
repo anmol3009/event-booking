@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const {
   holdSeats,
+  releaseSeats,
   confirmBooking,
   getMyBookings,
   cancelBooking,
@@ -10,6 +11,7 @@ const verifyAuth = require('../middleware/auth');
 
 // Protected routes
 router.post('/hold',              verifyAuth, holdSeats);      // POST /api/bookings/hold
+router.post('/release',           verifyAuth, releaseSeats);   // POST /api/bookings/release
 router.post('/confirm',           verifyAuth, confirmBooking); // POST /api/bookings/confirm
 router.get('/my',                 verifyAuth, getMyBookings);  // GET  /api/bookings/my
 router.post('/:bookingId/cancel', verifyAuth, cancelBooking);  // POST /api/bookings/:id/cancel

@@ -33,6 +33,9 @@ export default function Checkout() {
   const coinDiscount = Math.min(userCoins, coinsToUse, total);
   const finalTotal = total - coinDiscount;
 
+  // Scroll to top when checkout page loads
+  useEffect(() => { window.scrollTo(0, 0); }, []);
+
   useEffect(() => {
     if (!holdExpiry) return;
     const expiry = new Date(holdExpiry).getTime();
@@ -68,7 +71,7 @@ export default function Checkout() {
   const handleConfirm = async () => {
     if (!validate()) return;
     if (!user?.token) return toast.error('Authentication expired. Please login again.');
-    
+
     try {
       setProcessing(true);
       // Simulate payment delay as requested (1.5s)
@@ -99,6 +102,7 @@ export default function Checkout() {
       // Clear selection
       clearSeats();
 
+<<<<<<< HEAD
       toast.success('Payment successful! Booking confirmed.');
 
       navigate(`/confirmation/${data.bookingId}`, { 
@@ -106,9 +110,16 @@ export default function Checkout() {
           event, 
           seats, 
           tier, 
+=======
+      navigate(`/confirmation/${data.bookingId}`, {
+        state: {
+          event,
+          seats,
+          tier,
+>>>>>>> 9d4a134d9f317251a0fd95c78b4f96cf088e7cb4
           total: finalTotal,
           bookingId: data.bookingId
-        } 
+        }
       });
     } catch (err) {
       toast.error(err.message);
@@ -125,7 +136,7 @@ export default function Checkout() {
     );
   }
 
-  const serviceFee = Math.round(total * 0.05);
+  const serviceFee = Math.round(total * 0.02);
   const grandTotal = finalTotal + serviceFee;
   const timerColor = timeLeft < 60 ? '#EF4444' : timeLeft < 180 ? '#F59E0B' : '#7DA8CF';
 
@@ -310,7 +321,7 @@ export default function Checkout() {
               </div>
             )}
             <div className="flex justify-between text-sm">
-              <span style={{ color: isDark ? '#666' : '#999' }}>Service Fee</span>
+              <span style={{ color: isDark ? '#666' : '#999' }}>Tax (2%)</span>
               <span className="font-mono" style={{ color: isDark ? '#fff' : '#111' }}>₹{serviceFee.toLocaleString()}</span>
             </div>
           </div>
