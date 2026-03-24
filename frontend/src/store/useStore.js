@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { io } from 'socket.io-client';
+import { signOut } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const socket = io(API_BASE, { autoConnect: false });
