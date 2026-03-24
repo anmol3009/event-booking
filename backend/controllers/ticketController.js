@@ -32,7 +32,7 @@ const generateQR = asyncHandler(async (req, res) => {
     bookingId: booking.bookingId,
     eventId:   booking.eventId,
     userId:    booking.userId,
-    seats:     booking.seats,
+    // seats:     booking.seats,
   });
 
   // Generate QR as base64 PNG data URL
@@ -52,8 +52,7 @@ const generateQR = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/tickets/verify
- * Verifies a scanned QR ticket.
- * Body: { bookingId, eventId, userId }  (values parsed from the QR)
+ * Scans and verifies a ticket using a static QR.
  */
 const verifyTicket = asyncHandler(async (req, res) => {
   const { bookingId, eventId, userId } = req.body;

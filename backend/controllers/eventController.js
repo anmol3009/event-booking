@@ -147,7 +147,15 @@ const getEventById = asyncHandler(async (req, res) => {
     .collection('seats')
     .get();
 
-  const seats = seatsSnap.docs.map(d => d.data());
+  const now = new Date();
+  const seats = seatsSnap.docs.map(d => {
+    const data = d.data();
+    // If seat is 'held' but expiry has passed, it's effectively available
+    if (data.status === 'held' && data.holdExpiry && new Date(data.holdExpiry) < now) {
+      return { ...data, status: 'available', heldBy: null, holdExpiry: null };
+    }
+    return data;
+  });
 
   res.status(200).json({
     success: true,

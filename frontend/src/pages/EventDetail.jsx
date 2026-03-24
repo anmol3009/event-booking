@@ -203,7 +203,7 @@ function Seat({ index, status, isSelected, onSelect, isDark, label, tierColor, i
   const getColor = () => {
     if (isSelected) return tierColor;
     if (status === 'booked') return isDark ? '#333' : '#d0d0d0';
-    if (status === 'held') return isDark ? '#222' : '#e8e8e8';
+    if (status === 'held') return tierColor; // Use original tier color but lower opacity
     return 'transparent';
   };
 
@@ -219,9 +219,11 @@ function Seat({ index, status, isSelected, onSelect, isDark, label, tierColor, i
         width: 22,
         height: 22,
         background: getColor(),
-        opacity: status === 'booked' ? 0.45 : status === 'held' ? 0.25 : 1,
+        opacity: status === 'booked' ? 0.45 : status === 'held' ? 0.35 : 1,
         boxShadow: isSelected 
           ? `0 0 20px ${tierColor}cc, 0 0 12px ${tierColor}, 0 4px 12px rgba(0,0,0,0.4), inset 0 0 8px rgba(255,255,255,0.3)` 
+          : status === 'held'
+          ? `0 0 12px ${TIER_COLORS.Held}66, inset 0 0 4px ${TIER_COLORS.Held}44`
           : isHighlighted && canSelect
           ? `0 0 14px ${tierColor}99, 0 0 8px ${tierColor}66, inset 0 0 4px ${tierColor}44`
           : canSelect
@@ -230,11 +232,13 @@ function Seat({ index, status, isSelected, onSelect, isDark, label, tierColor, i
         borderRadius: 4,
         border: isSelected 
           ? `2.5px solid #fff` 
+          : status === 'held'
+          ? `2px dashed ${TIER_COLORS.Held}`
           : isHighlighted && canSelect
           ? `1.5px solid ${tierColor}`
           : canSelect
           ? `1.5px solid ${tierColor}`
-          : status === 'booked' || status === 'held'
+          : status === 'booked'
           ? `1px solid ${isDark ? '#444' : '#999'}`
           : 'none',
       }}
@@ -336,33 +340,96 @@ export default function EventDetail() {
   const navigate = useNavigate();
   const [event, setEvent] = useState(null);
   const [loadingEvent, setLoadingEvent] = useState(true);
-  const { seatStates, initializeSeats, selectedSeats, selectSeat: storeSelectSeat, selectedTier, setSelectedTier } = useStore();
-  const { user } = useStore();
+  const { 
+    seatStates, initializeSeats, selectedSeats, 
+    selectSeat: storeSelectSeat, selectedTier, setSelectedTier,
+    socket, setSeatStatus, user 
+  } = useStore();
   const { mode } = useTheme();
   const isDark = mode === 'dark';
   const [zoom, setZoom] = useState(1);
   const [processing, setProcessing] = useState(false);
+  const [holdExpiries, setHoldExpiries] = useState({});
 
-  // Wrapper for selectSeat with 4-seat limit enforcement + toast notification
-  const selectSeat = useCallback((seatIndex) => {
-    if (selectedSeats.includes(seatIndex)) {
-      // Deselecting — always allowed
-      storeSelectSeat(seatIndex);
+  // Wrapper for selectSeat with 4-seat limit enforcement + immediate backend hold/release
+  const selectSeat = useCallback(async (seatIndex) => {
+    // Ensure seatIndex is a valid number (prevents accidental calls from events)
+    if (typeof seatIndex !== 'number') return;
+
+    if (!user?.token) {
+      toast.error('Please sign in to select seats');
+      navigate('/auth/login');
+      return;
+    }
+
+    const isCurrentlySelected = selectedSeats.includes(seatIndex);
+
+    if (isCurrentlySelected) {
+      // DESELECTING — release on backend
+      try {
+        const res = await fetch(`${API_BASE}/api/bookings/release`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${user.token}`
+          },
+          body: JSON.stringify({
+            eventId: id,
+            seatIds: [seatIndex.toString()]
+          })
+        });
+        if (res.ok) {
+          storeSelectSeat(seatIndex);
+          setHoldExpiries(prev => {
+            const next = { ...prev };
+            delete next[seatIndex];
+            return next;
+          });
+        }
+      } catch (err) {
+        toast.error('Failed to release seat');
+      }
     } else {
-      // Attempting to select
+      // SELECTING — hold on backend FIRST
       if (selectedSeats.length >= 4) {
         toast.error('Maximum 4 seats per booking');
         return;
       }
-      storeSelectSeat(seatIndex);
-    }
-  }, [selectedSeats, storeSelectSeat]);
 
-  // Fetch event from backend
-  useEffect(() => {
-    const load = async (isInitial = false) => {
+      setProcessing(true);
       try {
-        if (isInitial) setLoadingEvent(true);
+        const res = await fetch(`${API_BASE}/api/bookings/hold`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${user.token}`
+          },
+          body: JSON.stringify({
+            eventId: id,
+            seatIds: [seatIndex.toString()]
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Seat is no longer available');
+
+        // Success! select locally
+        storeSelectSeat(seatIndex);
+        setHoldExpiries(prev => ({ ...prev, [seatIndex]: data.holdExpiry }));
+        toast.success(`Seat ${seatIndex} held for 2 mins`, { icon: '🔒', duration: 2000 });
+      } catch (err) {
+        toast.error(err.message);
+      } finally {
+        setProcessing(false);
+      }
+    }
+  }, [selectedSeats, storeSelectSeat, user, id, navigate]);
+
+  // Fetch initial event data
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoadingEvent(true);
         const res = await fetch(`${API_BASE}/api/events/${id}`);
         if (!res.ok) throw new Error('Not found');
         const data = await res.json();
@@ -383,23 +450,31 @@ export default function EventDetail() {
             { name: 'General', price: e.generalPrice || 500 }
           ],
         };
-        if (isInitial) setEvent(normalised);
-        // Refresh seat states every poll — reflects cancellations/new bookings
+        setEvent(normalised);
         initializeSeats(normalised.totalSeats, data.seats || []);
       } catch (err) {
-        if (isInitial) {
-          setEvent(null);
-          toast.error('Failed to load event details');
-        }
+        setEvent(null);
+        toast.error('Failed to load event details');
       } finally {
-        if (isInitial) setLoadingEvent(false);
+        setLoadingEvent(false);
       }
     };
-    load(true);
-    // Poll every 30 seconds so seat layout stays current (cancellations, new bookings)
-    const poll = setInterval(() => load(false), 30000);
-    return () => clearInterval(poll);
+    load();
   }, [id, initializeSeats]);
+
+  // Real-time Socket Setup
+  useEffect(() => {
+    if (!id) return;
+    socket.connect();
+    socket.emit('joinEvent', id);
+    socket.on('seatUpdate', ({ seatId, status, holdExpiry }) => {
+      setSeatStatus(seatId, status, holdExpiry);
+    });
+    return () => {
+      socket.off('seatUpdate');
+      socket.disconnect();
+    };
+  }, [id, socket, setSeatStatus]);
 
   const venueLayout = useMemo(() => {
     if (!event) return [];
@@ -448,46 +523,20 @@ export default function EventDetail() {
 
   const totalPrice = selectedSeats.length ? selectedSeatsTotal : (activeTier?.price || event?.price || 0);
 
-  const handleProceed = useCallback(async () => {
+  const handleProceed = useCallback(() => {
     if (selectedSeats.length === 0) return;
-    if (!user?.token) {
-      toast.error('Please sign in to book tickets');
-      navigate('/auth/login');
-      return;
-    }
-
-    try {
-      setProcessing(true);
-      const res = await fetch(`${API_BASE}/api/bookings/hold`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({
-          eventId: event.id,
-          seatIds: selectedSeats.map(s => s.toString()) // Backend expects strings
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to hold seats');
-
-      navigate('/checkout', {
-        state: {
-          event,
-          seats: selectedSeats,
-          tier: selectedSeats.length > 0 ? seatTierByIndex[selectedSeats[0]] || (selectedTier || event.tiers[0].name) : (selectedTier || event.tiers[0].name),
-          total: totalPrice,
-          holdExpiry: data.holdExpiry
-        },
-      });
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setProcessing(false);
-    }
-  }, [selectedSeats, selectedTier, totalPrice, event, user, navigate]);
+    const firstSeat = selectedSeats[0];
+    const holdExpiry = holdExpiries[firstSeat];
+    navigate('/checkout', {
+      state: {
+        event,
+        seats: selectedSeats,
+        tier: selectedSeats.length > 0 ? seatTierByIndex[selectedSeats[0]] || (selectedTier || event.tiers[0].name) : (selectedTier || event.tiers[0].name),
+        total: totalPrice,
+        holdExpiry
+      },
+    });
+  }, [selectedSeats, selectedTier, totalPrice, event, navigate, holdExpiries, seatTierByIndex]);
 
   if (loadingEvent) {
     return (
