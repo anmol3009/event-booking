@@ -102,7 +102,6 @@ export default function Checkout() {
       // Clear selection
       clearSeats();
 
-<<<<<<< HEAD
       toast.success('Payment successful! Booking confirmed.');
 
       navigate(`/confirmation/${data.bookingId}`, { 
@@ -110,16 +109,9 @@ export default function Checkout() {
           event, 
           seats, 
           tier, 
-=======
-      navigate(`/confirmation/${data.bookingId}`, {
-        state: {
-          event,
-          seats,
-          tier,
->>>>>>> 9d4a134d9f317251a0fd95c78b4f96cf088e7cb4
           total: finalTotal,
           bookingId: data.bookingId
-        }
+        } 
       });
     } catch (err) {
       toast.error(err.message);
