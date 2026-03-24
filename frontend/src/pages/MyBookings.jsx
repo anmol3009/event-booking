@@ -638,13 +638,6 @@ export default function MyBookings() {
             </h2>
             <p className="text-sm mt-2" style={{ color: isDark ? '#666' : '#999' }}>Manage your tickets and reservations</p>
           </div>
-          <button
-            onClick={() => refreshFn?.()}
-            className="text-xs uppercase tracking-wider py-2 px-4 rounded-lg border cursor-pointer font-bold"
-            style={{ background: '#7DA8CF', color: '#000' }}
-          >
-            🔄 Refresh
-          </button>
         </div>
       </div>
 

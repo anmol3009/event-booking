@@ -1,7 +1,8 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Clock, CreditCard, Lock, ArrowLeft } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Clock, CreditCard, Lock, ArrowLeft, Smartphone, CheckCircle2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import useTheme from '../store/useTheme';
 import useStore from '../store/useStore';
 import toast from 'react-hot-toast';
@@ -16,12 +17,13 @@ export default function Checkout() {
   const [timeLeft, setTimeLeft] = useState(300);
   const [processing, setProcessing] = useState(false);
   const [coinsToUse, setCoinsToUse] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState('card');
   const [form, setForm] = useState({ 
-    name: user?.name || '', 
-    card: '', 
-    expiry: '', 
-    cvv: '', 
-    email: user?.email || '' 
+    name: 'John Doe', 
+    card: '4242 4242 4242 4242', 
+    expiry: '12/30', 
+    cvv: '123', 
+    email: 'test@email.com' 
   });
   const [errors, setErrors] = useState({});
   const { mode } = useTheme();
@@ -51,6 +53,7 @@ export default function Checkout() {
   };
 
   const validate = () => {
+    if (paymentMethod === 'upi') return true; // UPI is "I Have Paid" flow
     const e = {};
     if (!form.name.trim()) e.name = 'Name is required';
     const cardDigits = form.card.replace(/\s/g, '');
@@ -62,19 +65,15 @@ export default function Checkout() {
     return Object.keys(e).length === 0;
   };
 
-  const isFormValid =
-    form.name.trim() &&
-    /^\d{16}$/.test(form.card.replace(/\s/g, '')) &&
-    /^(0[1-9]|1[0-2])\/\d{2}$/.test(form.expiry) &&
-    /^\d{3,4}$/.test(form.cvv) &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
-
   const handleConfirm = async () => {
     if (!validate()) return;
     if (!user?.token) return toast.error('Authentication expired. Please login again.');
     
     try {
       setProcessing(true);
+      // Simulate payment delay as requested (1.5s)
+      await new Promise(r => setTimeout(r, 1500));
+
       const res = await fetch(`${API_BASE}/api/bookings/confirm`, {
         method: 'POST',
         headers: {
@@ -99,6 +98,8 @@ export default function Checkout() {
 
       // Clear selection
       clearSeats();
+
+      toast.success('Payment successful! Booking confirmed.');
 
       navigate(`/confirmation/${data.bookingId}`, { 
         state: { 
@@ -134,6 +135,8 @@ export default function Checkout() {
     color: isDark ? '#fff' : '#333',
   };
 
+  const upiLink = `upi://pay?pa=shardulaher@oksbi&pn=CookMyShow&am=1&cu=INR`;
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
       <button onClick={() => navigate(-1)} className="link-more mb-6 text-sm bg-transparent border-none cursor-pointer flex items-center gap-1" style={{ color: '#7DA8CF' }}>
@@ -155,68 +158,131 @@ export default function Checkout() {
       <h2 className="text-3xl font-bold font-heading mb-8" style={{ color: isDark ? '#fff' : '#111' }}>Checkout</h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-10">
-        {/* Payment Form */}
-        <div className="rounded-lg border p-6" style={{ borderColor: isDark ? '#1a1a1a' : '#eee', background: isDark ? '#0a0a0a' : '#fafafa' }}>
-          <h3 className="text-xs uppercase tracking-widest font-bold mb-6 flex items-center gap-2" style={{ color: '#7DA8CF' }}>
-            <CreditCard className="w-4 h-4" /> Payment Details
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Cardholder Name</label>
-              <input
-                type="text" placeholder="John Doe" value={form.name}
-                onChange={e => setField('name', e.target.value)}
-                className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none"
-                style={{ ...inputStyle, borderColor: errors.name ? '#EF4444' : inputStyle.borderColor }}
-              />
-              {errors.name && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.name}</p>}
-            </div>
-            <div>
-              <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Card Number</label>
-              <input
-                type="text" placeholder="4242 4242 4242 4242" value={form.card} maxLength={19}
-                onChange={e => setField('card', e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').slice(0, 19))}
-                className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none font-mono"
-                style={{ ...inputStyle, borderColor: errors.card ? '#EF4444' : inputStyle.borderColor }}
-              />
-              {errors.card && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.card}</p>}
-            </div>
+        <div className="space-y-6">
+          {/* Payment Method Selector */}
+          <div className="rounded-lg border p-6" style={{ borderColor: isDark ? '#1a1a1a' : '#eee', background: isDark ? '#0a0a0a' : '#fafafa' }}>
+            <h3 className="text-xs uppercase tracking-widest font-bold mb-5 flex items-center gap-2" style={{ color: '#7DA8CF' }}>
+              Select Payment Method
+            </h3>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Expiry</label>
-                <input
-                  type="text" placeholder="MM/YY" value={form.expiry} maxLength={5}
-                  onChange={e => {
-                    let v = e.target.value.replace(/\D/g, '');
-                    if (v.length >= 3) v = v.slice(0, 2) + '/' + v.slice(2, 4);
-                    setField('expiry', v);
-                  }}
-                  className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none font-mono"
-                  style={{ ...inputStyle, borderColor: errors.expiry ? '#EF4444' : inputStyle.borderColor }}
-                />
-                {errors.expiry && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.expiry}</p>}
-              </div>
-              <div>
-                <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>CVV</label>
-                <input
-                  type="text" placeholder="123" value={form.cvv} maxLength={4}
-                  onChange={e => setField('cvv', e.target.value.replace(/\D/g, ''))}
-                  className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none font-mono"
-                  style={{ ...inputStyle, borderColor: errors.cvv ? '#EF4444' : inputStyle.borderColor }}
-                />
-                {errors.cvv && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.cvv}</p>}
-              </div>
+              <button
+                onClick={() => setPaymentMethod('card')}
+                className={`flex items-center justify-center gap-3 p-4 rounded-xl border transition-all ${paymentMethod === 'card' ? 'border-[#7DA8CF] bg-[#7DA8CF]/5' : 'border-transparent bg-white/5'}`}
+                style={{ color: paymentMethod === 'card' ? '#7DA8CF' : (isDark ? '#666' : '#999') }}
+              >
+                <CreditCard className="w-5 h-5" />
+                <span className="text-sm font-bold uppercase tracking-wider">Card</span>
+              </button>
+              <button
+                onClick={() => setPaymentMethod('upi')}
+                className={`flex items-center justify-center gap-3 p-4 rounded-xl border transition-all ${paymentMethod === 'upi' ? 'border-[#7DA8CF] bg-[#7DA8CF]/5' : 'border-transparent bg-white/5'}`}
+                style={{ color: paymentMethod === 'upi' ? '#7DA8CF' : (isDark ? '#666' : '#999') }}
+              >
+                <Smartphone className="w-5 h-5" />
+                <span className="text-sm font-bold uppercase tracking-wider">UPI QR</span>
+              </button>
             </div>
-            <div>
-              <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Email</label>
-              <input
-                type="email" placeholder="you@email.com" value={form.email}
-                onChange={e => setField('email', e.target.value)}
-                className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none"
-                style={{ ...inputStyle, borderColor: errors.email ? '#EF4444' : inputStyle.borderColor }}
-              />
-              {errors.email && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{errors.email}</p>}
-            </div>
+          </div>
+
+          {/* Dynamic Payment Details */}
+          <div className="rounded-lg border p-6 min-h-[400px]" style={{ borderColor: isDark ? '#1a1a1a' : '#eee', background: isDark ? '#0a0a0a' : '#fafafa' }}>
+            <AnimatePresence mode="wait">
+              {paymentMethod === 'card' ? (
+                <motion.div
+                  key="card"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="space-y-4"
+                >
+                  <h3 className="text-xs uppercase tracking-widest font-bold mb-6 flex items-center gap-2" style={{ color: '#7DA8CF' }}>
+                    <CreditCard className="w-4 h-4" /> Card Details (Demo Mode)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Cardholder Name</label>
+                      <input
+                        type="text" value={form.name}
+                        onChange={e => setField('name', e.target.value)}
+                        className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none"
+                        style={{ ...inputStyle, borderColor: errors.name ? '#EF4444' : inputStyle.borderColor }}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Card Number</label>
+                      <input
+                        type="text" value={form.card} maxLength={19}
+                        onChange={e => setField('card', e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').slice(0, 19))}
+                        className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none font-mono"
+                        style={{ ...inputStyle, borderColor: errors.card ? '#EF4444' : inputStyle.borderColor }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Expiry</label>
+                      <input
+                        type="text" value={form.expiry} maxLength={5}
+                        onChange={e => setField('expiry', e.target.value)}
+                        className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none font-mono"
+                        style={{ ...inputStyle, borderColor: errors.expiry ? '#EF4444' : inputStyle.borderColor }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>CVV</label>
+                      <input
+                        type="text" value={form.cvv} maxLength={4}
+                        onChange={e => setField('cvv', e.target.value)}
+                        className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none font-mono"
+                        style={{ ...inputStyle, borderColor: errors.cvv ? '#EF4444' : inputStyle.borderColor }}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: isDark ? '#555' : '#aaa' }}>Email</label>
+                      <input
+                        type="email" value={form.email}
+                        onChange={e => setField('email', e.target.value)}
+                        className="w-full rounded border px-4 py-2.5 text-sm focus:outline-none"
+                        style={{ ...inputStyle, borderColor: errors.email ? '#EF4444' : inputStyle.borderColor }}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="upi"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="flex flex-col items-center justify-center py-6 text-center"
+                >
+                  <h3 className="text-xs uppercase tracking-widest font-bold mb-8 flex items-center gap-2" style={{ color: '#7DA8CF' }}>
+                    <Smartphone className="w-4 h-4" /> Scan to Pay
+                  </h3>
+                  
+                  <div className="p-6 rounded-[2rem] bg-white shadow-2xl mb-6">
+                    <QRCodeSVG 
+                      value={upiLink} 
+                      size={200}
+                      level="H"
+                    />
+                  </div>
+                  
+                  <p className="text-xl font-bold mb-2" style={{ color: isDark ? '#fff' : '#111' }}>
+                    Scan to Pay ₹1 via UPI
+                  </p>
+                  <p className="text-xs text-gray-500 mb-6">
+                    Use any UPI app (GPay, PhonePe, PayTM)
+                  </p>
+                  
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10 font-mono text-xs mb-8">
+                    upiId: cookmyshow@bank
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs text-green-500 font-bold uppercase tracking-widest">
+                    <CheckCircle2 className="w-4 h-4" /> Instant Verification Enabled
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -225,7 +291,7 @@ export default function Checkout() {
           <h3 className="text-xs uppercase tracking-widest font-bold mb-5" style={{ color: '#7DA8CF' }}>Order Summary</h3>
 
           <div className="flex items-center gap-3 pb-4 mb-4 border-b" style={{ borderColor: isDark ? '#1a1a1a' : '#eee' }}>
-            <img src={event.image} alt="" className="w-14 h-14 rounded object-cover" style={{ filter: isDark ? 'brightness(0.8)' : 'none' }} />
+            <img src={event.image || (event.images?.[0])} alt="" className="w-14 h-14 rounded object-cover" style={{ filter: isDark ? 'brightness(0.8)' : 'none' }} />
             <div>
               <p className="text-sm font-semibold" style={{ color: isDark ? '#fff' : '#111' }}>{event.title}</p>
               <p className="text-xs" style={{ color: isDark ? '#555' : '#999' }}>{event.date}</p>
@@ -278,7 +344,7 @@ export default function Checkout() {
           )}
 
           <div className="border-t pt-4 flex justify-between items-baseline" style={{ borderColor: isDark ? '#1a1a1a' : '#eee' }}>
-            <span className="font-semibold" style={{ color: isDark ? '#fff' : '#111' }}>Total</span>
+            <span className="font-semibold" style={{ color: isDark ? '#fff' : '#111' }}>Total Amount</span>
             <span className="text-2xl font-bold font-mono" style={{ color: '#7DA8CF' }}>₹{grandTotal.toLocaleString()}</span>
           </div>
 
@@ -290,6 +356,8 @@ export default function Checkout() {
           >
             {processing ? (
               <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-5 h-5 border-2 border-black border-t-transparent rounded-full" />
+            ) : paymentMethod === 'upi' ? (
+              <>I Have Paid</>
             ) : (
               <><Lock className="w-4 h-4" /> Confirm Booking</>
             )}
