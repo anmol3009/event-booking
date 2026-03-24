@@ -76,10 +76,18 @@ function TicketQRModal({ booking, isDark, onClose }) {
 }
 
 function ResellModal({ booking, isDark, onClose, onRefresh }) {
-  const maxPrice = booking.total * 2;
-  const [resellPrice, setResellPrice] = useState(booking.total);
+  const totalSeats = booking.seats.length;
+  const originalPerSeat = Math.round(booking.total / totalSeats);
+  const [seatCount, setSeatCount] = useState(totalSeats);
+  const [pricePerSeat, setPricePerSeat] = useState(originalPerSeat);
   const [processing, setProcessing] = useState(false);
   const { user } = useStore();
+
+  const minPerSeat = Math.round(originalPerSeat * 0.5);
+  const maxPerSeat = Math.round(originalPerSeat * 2);
+  const totalResellPrice = pricePerSeat * seatCount;
+  const seatsToList = booking.seats.slice(0, seatCount);
+  const percent = ((pricePerSeat - minPerSeat) / (maxPerSeat - minPerSeat)) * 100;
 
   const handleList = async () => {
     try {
@@ -92,13 +100,14 @@ function ResellModal({ booking, isDark, onClose, onRefresh }) {
         },
         body: JSON.stringify({
           bookingId: booking.id,
-          price: resellPrice
+          price: totalResellPrice,
+          seats: seatsToList,
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to list ticket');
 
-      toast.success(`Ticket listed for resale at ₹${resellPrice.toLocaleString()}`);
+      toast.success(`${seatCount} seat${seatCount > 1 ? 's' : ''} listed for ₹${totalResellPrice.toLocaleString()}`);
       onRefresh();
       onClose();
     } catch (err) {
@@ -107,8 +116,6 @@ function ResellModal({ booking, isDark, onClose, onRefresh }) {
       setProcessing(false);
     }
   };
-
-  const percent = ((resellPrice - Math.round(booking.total * 0.5)) / (maxPrice - Math.round(booking.total * 0.5))) * 100;
 
   return (
     <motion.div
@@ -139,35 +146,71 @@ function ResellModal({ booking, isDark, onClose, onRefresh }) {
         <div className="rounded-lg p-4 mb-5" style={{ background: isDark ? '#111' : '#f5f5f5' }}>
           <p className="font-semibold text-sm mb-1" style={{ color: isDark ? '#fff' : '#111' }}>{booking.eventTitle}</p>
           <p className="text-xs" style={{ color: isDark ? '#555' : '#999' }}>
-            {booking.tier} &middot; Seats: {booking.seats.join(', ')} &middot; Bought at ₹{booking.total.toLocaleString()}
+            {booking.tier} &middot; All seats: {booking.seats.join(', ')} &middot; Bought at ₹{booking.total.toLocaleString()}
           </p>
         </div>
+
+        {/* Seat count selector */}
+        {totalSeats > 1 && (
+          <div className="mb-5">
+            <label className="block text-xs uppercase tracking-wider mb-3" style={{ color: isDark ? '#555' : '#aaa' }}>
+              Seats to resell
+            </label>
+            <div className="flex items-center justify-between gap-4">
+              <button
+                onClick={() => setSeatCount(c => Math.max(1, c - 1))}
+                disabled={seatCount <= 1}
+                className="w-9 h-9 rounded-full border font-bold text-lg flex items-center justify-center cursor-pointer disabled:opacity-30"
+                style={{ background: isDark ? '#111' : '#f5f5f5', borderColor: isDark ? '#333' : '#ddd', color: isDark ? '#fff' : '#111' }}
+              >−</button>
+              <div className="flex-1 text-center">
+                <span className="text-2xl font-bold font-mono" style={{ color: '#7DA8CF' }}>{seatCount}</span>
+                <span className="text-sm ml-1" style={{ color: isDark ? '#555' : '#999' }}>/ {totalSeats} seat{totalSeats > 1 ? 's' : ''}</span>
+                <p className="text-[11px] mt-1 font-mono" style={{ color: isDark ? '#444' : '#bbb' }}>
+                  Listing: {seatsToList.join(', ')}
+                </p>
+              </div>
+              <button
+                onClick={() => setSeatCount(c => Math.min(totalSeats, c + 1))}
+                disabled={seatCount >= totalSeats}
+                className="w-9 h-9 rounded-full border font-bold text-lg flex items-center justify-center cursor-pointer disabled:opacity-30"
+                style={{ background: isDark ? '#111' : '#f5f5f5', borderColor: isDark ? '#333' : '#ddd', color: isDark ? '#fff' : '#111' }}
+              >+</button>
+            </div>
+          </div>
+        )}
 
         {/* Price input */}
         <div className="mb-4">
           <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: isDark ? '#555' : '#aaa' }}>
-            Set your resale price
+            Price per seat
           </label>
-          <div className="text-center mb-3">
+          <div className="text-center mb-1">
             <span className="text-3xl font-bold font-mono" style={{ color: '#7DA8CF' }}>
-              ₹{resellPrice.toLocaleString()}
+              ₹{pricePerSeat.toLocaleString()}
             </span>
+            <span className="text-sm ml-2" style={{ color: isDark ? '#555' : '#999' }}>/ seat</span>
           </div>
+          {seatCount > 1 && (
+            <p className="text-center text-sm font-mono mb-3" style={{ color: isDark ? '#666' : '#888' }}>
+              Total: ₹{totalResellPrice.toLocaleString()} for {seatCount} seats
+            </p>
+          )}
 
           {/* Slider */}
           <div className="relative mb-2">
             <div className="w-full h-2 rounded-full" style={{ background: isDark ? '#1a1a1a' : '#e5e5e5' }} />
             <div
               className="absolute top-0 left-0 h-2 rounded-full transition-all duration-100"
-              style={{ width: `${percent}%`, background: resellPrice > booking.total ? '#F59E0B' : '#4ADE80' }}
+              style={{ width: `${percent}%`, background: pricePerSeat > originalPerSeat ? '#F59E0B' : '#4ADE80' }}
             />
             <input
               type="range"
-              min={Math.round(booking.total * 0.5)}
-              max={maxPrice}
-              step={10}
-              value={resellPrice}
-              onChange={(e) => setResellPrice(Number(e.target.value))}
+              min={minPerSeat}
+              max={maxPerSeat}
+              step={5}
+              value={pricePerSeat}
+              onChange={(e) => setPricePerSeat(Number(e.target.value))}
               className="absolute top-0 left-0 w-full h-2 opacity-0 cursor-pointer"
               style={{ margin: 0 }}
             />
@@ -176,16 +219,16 @@ function ResellModal({ booking, isDark, onClose, onRefresh }) {
               style={{
                 left: `calc(${percent}% - 10px)`,
                 background: isDark ? '#000' : '#fff',
-                borderColor: resellPrice > booking.total ? '#F59E0B' : '#4ADE80',
+                borderColor: pricePerSeat > originalPerSeat ? '#F59E0B' : '#4ADE80',
                 top: '4px',
               }}
             />
           </div>
 
           <div className="flex justify-between text-[10px] font-mono" style={{ color: isDark ? '#444' : '#bbb' }}>
-            <span>₹{Math.round(booking.total * 0.5)}</span>
-            <span>Original: ₹{booking.total}</span>
-            <span>Max 2x: ₹{maxPrice}</span>
+            <span>₹{minPerSeat}/seat</span>
+            <span>Original: ₹{originalPerSeat}/seat</span>
+            <span>Max: ₹{maxPerSeat}/seat</span>
           </div>
         </div>
 
@@ -193,7 +236,7 @@ function ResellModal({ booking, isDark, onClose, onRefresh }) {
         <div className="rounded-lg p-3 mb-5 flex items-start gap-2" style={{ background: 'rgba(125,168,207,0.08)' }}>
           <span className="text-xs" style={{ color: '#7DA8CF' }}>ℹ</span>
           <p className="text-xs" style={{ color: isDark ? '#888' : '#666' }}>
-            Maximum resale price is capped at 2x the original price (₹{maxPrice.toLocaleString()}) to ensure fair pricing.
+            Max price is 2× per seat (₹{maxPerSeat}/seat). Listing {seatCount} seat{seatCount > 1 ? 's' : ''} · Total ₹{totalResellPrice.toLocaleString()}.
           </p>
         </div>
 
@@ -211,7 +254,7 @@ function ResellModal({ booking, isDark, onClose, onRefresh }) {
             className="flex-1 py-2.5 rounded-lg text-sm font-bold uppercase tracking-wider border-none cursor-pointer disabled:opacity-50"
             style={{ background: '#7DA8CF', color: '#000' }}
           >
-            {processing ? 'Listing...' : `List for ₹${resellPrice.toLocaleString()}`}
+            {processing ? 'Listing...' : `List ${seatCount} seat${seatCount > 1 ? 's' : ''} · ₹${totalResellPrice.toLocaleString()}`}
           </button>
         </div>
       </motion.div>
