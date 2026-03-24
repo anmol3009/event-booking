@@ -16,6 +16,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import EventCalendar from './pages/EventCalendar';
 import Movies from './pages/Movies';
 import MovieDetail from './pages/MovieDetail';
+import ScrollToTop from './components/shared/ScrollToTop';
 import TicketView from './pages/TicketView';
 import useTheme from './store/useTheme';
 import { Toaster } from 'react-hot-toast';
@@ -27,6 +28,7 @@ export default function App() {
     <div className={mode}>
       <Toaster position="top-right" />
       <BrowserRouter>
+        <ScrollToTop />
         <Routes>
           {/* Standalone ticket view for QR scans */}
           <Route path="/ticket/:bookingId" element={<TicketView />} />

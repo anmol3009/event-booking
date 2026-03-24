@@ -33,8 +33,6 @@ export default function Checkout() {
   const coinDiscount = Math.min(userCoins, coinsToUse, total);
   const finalTotal = total - coinDiscount;
 
-  // Scroll to top when checkout page loads
-  useEffect(() => { window.scrollTo(0, 0); }, []);
 
   useEffect(() => {
     if (!holdExpiry) return;
