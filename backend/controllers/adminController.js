@@ -49,27 +49,52 @@ const getEventAnalytics = asyncHandler(async (req, res) => {
   const confirmed  = bookings.filter(b => b.status === 'confirmed');
   const cancelled  = bookings.filter(b => b.status === 'cancelled');
 
+  // Accurately count total tickets (seats) sold, not just count of bookings
+  const totalTicketsSold = confirmed.reduce((sum, b) => sum + (b.seats?.length || 0), 0);
   const totalRevenue = confirmed.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
 
-  // Resold ticket count and basic daily sales aggregation
-  const resoldCount = confirmed.filter(b => b.fromResale).length;
-
+  // Daily sales aggregation
   const dailySales = {};
   confirmed.forEach(b => {
     let day = 'unknown';
     try {
       const dayDate = new Date(b.createdAt);
-      if (!isNaN(dayDate)) {
-        day = dayDate.toISOString().split('T')[0];
-      }
-    } catch (e) {
-      day = 'unknown';
-    }
+      if (!isNaN(dayDate)) day = dayDate.toISOString().split('T')[0];
+    } catch (e) {}
     dailySales[day] = (dailySales[day] || 0) + (b.totalAmount || 0);
   });
+  const dailySalesArray = Object.keys(dailySales).sort().map(date => ({ date, revenue: dailySales[date] }));
 
-  const sortedDays = Object.keys(dailySales).sort();
-  const dailySalesArray = sortedDays.map((key) => ({ date: key, revenue: dailySales[key] }));
+  // Detailed Sales (flattened for the table)
+  // To avoid repeated DB calls, we'll collect unique user IDs first
+  const userIds = [...new Set(confirmed.map(b => b.userId))];
+  const userMap = {};
+  if (userIds.length > 0) {
+    const userSnaps = await Promise.all(userIds.map(uid => db.collection('users').doc(uid).get()));
+    userSnaps.forEach(snap => {
+      if (snap.exists) userMap[snap.id] = snap.data().name || 'Unknown';
+    });
+  }
+
+  // Create a seat label lookup from the seats we already fetched
+  const seatMapData = {};
+  seats.forEach(s => { seatMapData[s.seatId] = s; });
+
+  const salesDetails = [];
+  confirmed.forEach(b => {
+    const ownerName = userMap[b.userId] || 'Unknown';
+    (b.seats || []).forEach(sid => {
+      const sinfo = seatMapData[sid];
+      salesDetails.push({
+        bookingId: b.bookingId,
+        owner:     ownerName,
+        seat:      sinfo?.label || sid,
+        type:      sinfo?.category || 'General',
+        amount:    sinfo?.price || 0,
+        date:      b.createdAt
+      });
+    });
+  });
 
   // Waitlist count
   const waitlistSnap = await db
@@ -81,32 +106,22 @@ const getEventAnalytics = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     analytics: {
-      event: {
-        title:  event.title,
-        date:   event.date,
-        venue:  event.venue,
-      },
-      seats: {
-        total:     totalSeats,
-        booked:    bookedSeats,
-        available: availableSeats,
-        held:      heldSeats,
-      },
+      event: { title: event.title, date: event.date, venue: event.venue },
+      seats: { total: totalSeats, booked: bookedSeats, available: availableSeats, held: heldSeats },
       bookings: {
-        confirmed: confirmed.length,
+        confirmed: confirmed.length, // Transactions
+        ticketsSold: totalTicketsSold, // UNIQUE SEATS
         cancelled: cancelled.length,
-        resold:    resoldCount,
+        resold: confirmed.filter(b => b.fromResale).length,
       },
-      revenue: {
-        total:    totalRevenue,
-        currency: 'INR',
-      },
+      revenue: { total: totalRevenue, currency: 'INR' },
       breakdown: {
         vip:     { total: vipTotal,     booked: vipBooked },
         general: { total: generalTotal, booked: generalBooked },
       },
       waitlistCount: waitlistSnap.size,
       dailySales: dailySalesArray,
+      salesDetails, // Flattened seat-level data
     },
   });
 });
